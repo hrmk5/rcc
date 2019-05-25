@@ -58,6 +58,17 @@ impl Tokenizer {
         self.next();
     }
 
+    fn skip_whitespace(&mut self) {
+        loop {
+            match self.ch {
+                ' ' | '\t' | '\r' => {},
+                _ => break,
+            }
+
+            self.next();
+        }
+    }
+
     fn tokenize_number(&mut self) {
         let mut num: i32 = 0;
         while self.ch.is_ascii_digit() {
@@ -70,6 +81,8 @@ impl Tokenizer {
 
     pub fn tokenize(&mut self) {
         loop {
+            self.skip_whitespace();
+
             match self.ch {
                 c if c.is_ascii_digit() => self.tokenize_number(),
                 '+' => self.add_token_and_next(TokenKind::Add),
