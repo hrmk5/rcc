@@ -1,6 +1,12 @@
 #[derive(Debug)]
 pub enum TokenKind {
     Number(i32),
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Lparen,
+    Rparen,
 }
 
 #[derive(Debug)]
@@ -47,20 +53,31 @@ impl Tokenizer {
         });
     }
 
+    fn add_token_and_next(&mut self, kind: TokenKind) {
+        self.add_token(kind);
+        self.next();
+    }
+
     fn tokenize_number(&mut self) {
-        let mut result: i32 = 0;
+        let mut num: i32 = 0;
         while self.ch.is_ascii_digit() {
-            result = (10 * result) + self.ch.to_digit(10).unwrap() as i32;
+            num = (10 * num) + self.ch.to_digit(10).unwrap() as i32;
             self.next();
         }
 
-        self.add_token(TokenKind::Number(result));
+        self.add_token(TokenKind::Number(num));
     }
 
     pub fn tokenize(&mut self) {
         loop {
             match self.ch {
                 c if c.is_ascii_digit() => self.tokenize_number(),
+                '+' => self.add_token_and_next(TokenKind::Add),
+                '-' => self.add_token_and_next(TokenKind::Sub),
+                '*' => self.add_token_and_next(TokenKind::Mul),
+                '/' => self.add_token_and_next(TokenKind::Div),
+                '(' => self.add_token_and_next(TokenKind::Lparen),
+                ')' => self.add_token_and_next(TokenKind::Rparen),
                 '\0' => break,
                 _ => { self.error("Unexpected token"); self.next() },
             }
