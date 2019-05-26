@@ -1,8 +1,12 @@
 mod tokenizer;
+mod parser;
+mod gen;
 
 use std::env;
 use std::process;
 use tokenizer::Tokenizer;
+use parser::Parser;
+use gen::gen;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -15,4 +19,9 @@ fn main() {
     tokenizer.tokenize();
 
     println!("{:?}", tokenizer.tokens);
+
+    let mut parser = Parser::new(tokenizer.tokens);
+    let expr = parser.parse();
+
+    println!("{:?}", expr);
 }

@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TokenKind {
     Number(i32),
     Add,
@@ -7,12 +7,13 @@ pub enum TokenKind {
     Div,
     Lparen,
     Rparen,
+    EOF,
 }
 
 #[derive(Debug)]
 pub struct Token {
-    kind: TokenKind,
-    pos: usize,
+    pub kind: TokenKind,
+    pub pos: usize,
 }
 
 #[derive(Debug)]
@@ -95,5 +96,7 @@ impl Tokenizer {
                 _ => { self.error("Unexpected token"); self.next() },
             }
         }
+
+        self.add_token(TokenKind::EOF);
     }
 }
