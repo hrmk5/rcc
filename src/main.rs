@@ -18,10 +18,15 @@ fn main() {
     let mut tokenizer = Tokenizer::new(&args[1]);
     tokenizer.tokenize();
 
-    println!("{:?}", tokenizer.tokens);
+    //println!("{:?}", tokenizer.tokens);
 
     let mut parser = Parser::new(tokenizer.tokens);
     let expr = parser.parse();
 
-    println!("{:?}", expr);
+    //println!("{:?}", expr);
+
+    let mut asm = String::new();
+    gen(&expr, &mut asm);
+
+    println!("{}", asm);
 }
