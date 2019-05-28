@@ -50,7 +50,7 @@ impl Parser {
         println!("{}^ {}", std::iter::repeat(" ").take(pos).collect::<String>(), msg);
     }
 
-    pub fn parse_term(&mut self) -> Expr {
+    fn parse_term(&mut self) -> Expr {
         match self.tokens[self.pos].kind {
             TokenKind::Lparen => {
                 self.pos += 1;
@@ -71,21 +71,21 @@ impl Parser {
         }
     }
 
-    pub fn parse_mul(&mut self) -> Expr {
-        let mut expr = self.parse_term();
+    fn parse_mul(&mut self) -> Expr {
+        let mut expr = self.parse_unary();
 
         loop {
             if self.consume(TokenKind::Mul) {
-                expr = Expr::Infix(Infix::Mul, Box::new(expr), Box::new(self.parse_term()));
+                expr = Expr::Infix(Infix::Mul, Box::new(expr), Box::new(self.parse_unary()));
             } else if self.consume(TokenKind::Div) {
-                expr = Expr::Infix(Infix::Div, Box::new(expr), Box::new(self.parse_term()));
+                expr = Expr::Infix(Infix::Div, Box::new(expr), Box::new(self.parse_unary()));
             } else {
                 return expr;
             }
         }
     }
 
-    pub fn parse(&mut self) -> Expr {
+    fn parse_expr(&mut self) -> Expr {
         let mut expr = self.parse_mul(); 
 
         loop {
@@ -97,5 +97,25 @@ impl Parser {
                 return expr;
             }
         }
+    }
+
+    fn parse_unary(&mut self) -> Expr {
+        match self.tokens[self.pos].kind {
+            TokenKind::Add => {
+                self.pos += 1;
+                self.parse_term()
+            },
+            TokenKind::Sub => {
+                self.pos += 1;
+                Expr::Infix(Infix::Sub, Box::new(Expr::Literal(Literal::Number(0))), Box::new(self.parse_term()))
+            },
+            _ => {
+                self.parse_term()
+            }
+        }
+    }
+
+    pub fn parse(&mut self) -> Expr {
+        self.parse_expr()
     }
 }
