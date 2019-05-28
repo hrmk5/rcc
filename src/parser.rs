@@ -6,6 +6,10 @@ pub enum Infix {
     Sub,
     Mul,
     Div,
+    LessThan,
+    LessThanOrEqual,
+    Equal,
+    NotEqual,
 }
 
 #[derive(Debug)]
@@ -79,34 +83,6 @@ impl Parser {
         }
     }
 
-    fn parse_mul(&mut self) -> Expr {
-        let mut expr = self.parse_unary();
-
-        loop {
-            if self.consume(TokenKind::Mul) {
-                expr = Expr::Infix(Infix::Mul, Box::new(expr), Box::new(self.parse_unary()));
-            } else if self.consume(TokenKind::Div) {
-                expr = Expr::Infix(Infix::Div, Box::new(expr), Box::new(self.parse_unary()));
-            } else {
-                return expr;
-            }
-        }
-    }
-
-    fn parse_expr(&mut self) -> Expr {
-        let mut expr = self.parse_mul(); 
-
-        loop {
-            if self.consume(TokenKind::Add) {
-                expr = Expr::Infix(Infix::Add, Box::new(expr), Box::new(self.parse_mul()));
-            } else if self.consume(TokenKind::Sub) {
-                expr = Expr::Infix(Infix::Sub, Box::new(expr), Box::new(self.parse_mul()));
-            } else {
-                return expr;
-            }
-        }
-    }
-
     fn parse_unary(&mut self) -> Expr {
         match self.tokens[self.pos].kind {
             TokenKind::Add => {
@@ -123,7 +99,67 @@ impl Parser {
         }
     }
 
+    fn parse_mul(&mut self) -> Expr {
+        let mut expr = self.parse_unary();
+
+        loop {
+            if self.consume(TokenKind::Mul) {
+                expr = Expr::Infix(Infix::Mul, Box::new(expr), Box::new(self.parse_unary()));
+            } else if self.consume(TokenKind::Div) {
+                expr = Expr::Infix(Infix::Div, Box::new(expr), Box::new(self.parse_unary()));
+            } else {
+                return expr;
+            }
+        }
+    }
+
+    fn parse_add(&mut self) -> Expr {
+        let mut expr = self.parse_mul(); 
+
+        loop {
+            if self.consume(TokenKind::Add) {
+                expr = Expr::Infix(Infix::Add, Box::new(expr), Box::new(self.parse_mul()));
+            } else if self.consume(TokenKind::Sub) {
+                expr = Expr::Infix(Infix::Sub, Box::new(expr), Box::new(self.parse_mul()));
+            } else {
+                return expr;
+            }
+        }
+    }
+
+    fn parse_relational(&mut self) -> Expr {
+        let mut expr = self.parse_add(); 
+
+        loop {
+            if self.consume(TokenKind::LessThan) {
+                expr = Expr::Infix(Infix::LessThan, Box::new(expr), Box::new(self.parse_add()));
+            } else if self.consume(TokenKind::LessThanOrEqual) {
+                expr = Expr::Infix(Infix::LessThanOrEqual, Box::new(expr), Box::new(self.parse_add()));
+            } else if self.consume(TokenKind::GreaterThan) {
+                expr = Expr::Infix(Infix::LessThan, Box::new(self.parse_add()), Box::new(expr));
+            } else if self.consume(TokenKind::GreaterThanOrEqual) {
+                expr = Expr::Infix(Infix::LessThanOrEqual, Box::new(self.parse_add()), Box::new(expr));
+            } else {
+                return expr;
+            }
+        }
+    }
+
+    fn parse_equality(&mut self) -> Expr {
+        let mut expr = self.parse_relational(); 
+
+        loop {
+            if self.consume(TokenKind::Equal) {
+                expr = Expr::Infix(Infix::Equal, Box::new(expr), Box::new(self.parse_relational()));
+            } else if self.consume(TokenKind::NotEqual) {
+                expr = Expr::Infix(Infix::NotEqual, Box::new(expr), Box::new(self.parse_relational()));
+            } else {
+                return expr;
+            }
+        }
+    }
+
     pub fn parse(&mut self) -> Expr {
-        self.parse_expr()
+        self.parse_equality()
     }
 }

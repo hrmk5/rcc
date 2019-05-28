@@ -19,6 +19,10 @@ pub fn gen(expr: &Expr, asm: &mut String) {
                 Infix::Sub => "  sub rax, rdi\n",
                 Infix::Mul => "  imul rdi\n",
                 Infix::Div => "  cqo\n  idiv rdi\n",
+                Infix::Equal => "  cmp rax, rdi\n  sete al\n  movzb  rax, al\n",
+                Infix::NotEqual => "  cmp rax, rdi\n  setne al\n  movzb  rax, al\n",
+                Infix::LessThan => "  cmp rax, rdi\n  setl al\n  movzb  rax, al\n",
+                Infix::LessThanOrEqual => "  cmp rax, rdi\n  setle al\n  movzb  rax, al\n",
             });
 
             asm.push_str("  push rax\n");
