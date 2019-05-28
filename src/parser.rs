@@ -51,12 +51,23 @@ impl Parser {
     }
 
     pub fn parse_term(&mut self) -> Expr {
-        if let TokenKind::Number(num) = self.tokens[self.pos].kind {
-            self.pos += 1;
-            Expr::Literal(Literal::Number(num))
-        } else {
-            self.error_at(self.tokens[self.pos].pos, "数値ではないトークンです");
-            Expr::Invalid
+        match self.tokens[self.pos].kind {
+            TokenKind::Lparen => {
+                self.pos += 1;
+                let expr = self.parse();
+                if !self.consume(TokenKind::Rparen) {
+                    self.error_at(self.tokens[self.pos].pos, "開きカッコに対応する閉じカッコがありません");
+                }
+                expr
+            },
+            TokenKind::Number(num) => {
+                self.pos += 1;
+                Expr::Literal(Literal::Number(num))
+            },
+            _ => {
+                self.error_at(self.tokens[self.pos].pos, "数値でも開きカッコでもないトークンです");
+                Expr::Invalid
+            },
         }
     }
 
