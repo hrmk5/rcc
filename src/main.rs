@@ -15,13 +15,29 @@ fn main() {
         process::exit(1);
     }
 
-    let mut tokenizer = Tokenizer::new(&args[1]);
+    let input = &args[1];
+
+    let mut tokenizer = Tokenizer::new(input);
     tokenizer.tokenize();
+    if tokenizer.errors.len() > 0 {
+        for error in tokenizer.errors {
+            println!("{}", input);
+            println!("{}^ {}", " ".repeat(error.pos), error.message);
+        }
+        process::exit(1);
+    }
 
     //println!("{:?}", tokenizer.tokens);
 
-    let mut parser = Parser::new(&args[1], tokenizer.tokens);
+    let mut parser = Parser::new(tokenizer.tokens);
     let expr = parser.parse();
+    if parser.errors.len() > 0 {
+        for error in parser.errors {
+            println!("{}", input);
+            println!("{}^ {}", " ".repeat(error.pos), error.message);
+        }
+        process::exit(1);
+    }
 
     //println!("{:?}", expr);
 

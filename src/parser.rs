@@ -21,18 +21,24 @@ pub enum Expr {
 }
 
 #[derive(Debug)]
+pub struct ParseError {
+    pub pos: usize,
+    pub message: String,
+}
+
+#[derive(Debug)]
 pub struct Parser {
+    pub errors: Vec<ParseError>,
     tokens: Vec<Token>,
     pos: usize,
-    input: String,
 }
 
 impl Parser {
-    pub fn new(input: &str, tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Parser {
             pos: 0,
-            input: String::from(input),
             tokens,
+            errors: Vec::new(),
         }
     }
 
@@ -45,9 +51,11 @@ impl Parser {
         }
     }
 
-    fn error_at(&self, pos: usize, msg: &str) {
-        println!("{}", self.input);
-        println!("{}^ {}", std::iter::repeat(" ").take(pos).collect::<String>(), msg);
+    fn add_error(&mut self, msg: &str) {
+        self.errors.push(ParseError {
+            pos: self.tokens[self.pos].pos,
+            message: String::from(msg),
+        });
     }
 
     fn parse_term(&mut self) -> Expr {
@@ -56,7 +64,7 @@ impl Parser {
                 self.pos += 1;
                 let expr = self.parse();
                 if !self.consume(TokenKind::Rparen) {
-                    self.error_at(self.tokens[self.pos].pos, "開きカッコに対応する閉じカッコがありません");
+                    self.add_error("開きカッコに対応する閉じカッコがありません");
                 }
                 expr
             },
@@ -65,7 +73,7 @@ impl Parser {
                 Expr::Literal(Literal::Number(num))
             },
             _ => {
-                self.error_at(self.tokens[self.pos].pos, "数値でも開きカッコでもないトークンです");
+                self.add_error("数値でも開きカッコでもないトークンです");
                 Expr::Invalid
             },
         }

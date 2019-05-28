@@ -17,8 +17,15 @@ pub struct Token {
 }
 
 #[derive(Debug)]
+pub struct TokenizeError {
+    pub pos: usize,
+    pub message: String,
+}
+
+#[derive(Debug)]
 pub struct Tokenizer {
     pub tokens: Vec<Token>,
+    pub errors: Vec<TokenizeError>,
     input: Vec<char>,
     pos: usize,
     ch: char,
@@ -31,6 +38,7 @@ impl Tokenizer {
             input: input.chars().collect(),
             pos: 0,
             ch: input.chars().next().unwrap_or('\0'),
+            errors: Vec::new(),
         }
     }
 
@@ -42,9 +50,11 @@ impl Tokenizer {
         };
     }
 
-    fn error(&self, msg: &str) {
-        println!("{}", self.input.iter().collect::<String>());
-        println!("{}^ {}", std::iter::repeat(" ").take(self.pos).collect::<String>(), msg);
+    fn add_error(&mut self, msg: &str) {
+        self.errors.push(TokenizeError {
+            pos: self.pos,
+            message: String::from(msg),
+        });
     }
 
     fn add_token(&mut self, kind: TokenKind) {
@@ -93,7 +103,7 @@ impl Tokenizer {
                 '(' => self.add_token_and_next(TokenKind::Lparen),
                 ')' => self.add_token_and_next(TokenKind::Rparen),
                 '\0' => break,
-                _ => { self.error("Unexpected token"); self.next() },
+                _ => { self.add_error("Unexpected token"); self.next() },
             }
         }
 
