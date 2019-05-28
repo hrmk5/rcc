@@ -8,6 +8,12 @@ pub enum TokenKind {
     Lparen,
     Rparen,
     EOF,
+    Equal,
+    NotEqual,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
 }
 
 #[derive(Debug)]
@@ -64,9 +70,18 @@ impl Tokenizer {
         });
     }
 
-    fn add_token_and_next(&mut self, kind: TokenKind) {
+    fn add_token_and_skip(&mut self, kind: TokenKind, skip: usize) {
         self.add_token(kind);
-        self.next();
+        for _ in 0..skip {
+            self.next();
+        }
+    }
+
+    fn next_is(&self, ch: char) -> bool {
+        match self.input.get(self.pos + 1) {
+            Some(next) => ch == *next,
+            None => false,
+        }
     }
 
     fn skip_whitespace(&mut self) {
@@ -96,12 +111,18 @@ impl Tokenizer {
 
             match self.ch {
                 c if c.is_ascii_digit() => self.tokenize_number(),
-                '+' => self.add_token_and_next(TokenKind::Add),
-                '-' => self.add_token_and_next(TokenKind::Sub),
-                '*' => self.add_token_and_next(TokenKind::Mul),
-                '/' => self.add_token_and_next(TokenKind::Div),
-                '(' => self.add_token_and_next(TokenKind::Lparen),
-                ')' => self.add_token_and_next(TokenKind::Rparen),
+                '+' => self.add_token_and_skip(TokenKind::Add, 1),
+                '-' => self.add_token_and_skip(TokenKind::Sub, 1),
+                '*' => self.add_token_and_skip(TokenKind::Mul, 1),
+                '/' => self.add_token_and_skip(TokenKind::Div, 1),
+                '(' => self.add_token_and_skip(TokenKind::Lparen, 1),
+                ')' => self.add_token_and_skip(TokenKind::Rparen, 1),
+                '=' if self.next_is('=') => self.add_token_and_skip(TokenKind::Equal, 2),
+                '!' if self.next_is('=') => self.add_token_and_skip(TokenKind::NotEqual, 2),
+                '<' if self.next_is('=') => self.add_token_and_skip(TokenKind::LessThanOrEqual, 2),
+                '<' => self.add_token_and_skip(TokenKind::LessThan, 1),
+                '>' if self.next_is('=') => self.add_token_and_skip(TokenKind::GreaterThanOrEqual, 2),
+                '>' => self.add_token_and_skip(TokenKind::GreaterThan, 1),
                 '\0' => break,
                 _ => { self.add_error("Unexpected token"); self.next() },
             }
