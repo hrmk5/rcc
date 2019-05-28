@@ -17,18 +17,21 @@ pub enum Literal {
 pub enum Expr {
     Literal(Literal),
     Infix(Infix, Box<Expr>,  Box<Expr>),
+    Invalid,
 }
 
 #[derive(Debug)]
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
+    input: String,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(input: &str, tokens: Vec<Token>) -> Self {
         Parser {
             pos: 0,
+            input: String::from(input),
             tokens,
         }
     }
@@ -42,12 +45,18 @@ impl Parser {
         }
     }
 
+    fn error_at(&self, pos: usize, msg: &str) {
+        println!("{}", self.input);
+        println!("{}^ {}", std::iter::repeat(" ").take(pos).collect::<String>(), msg);
+    }
+
     pub fn parse_term(&mut self) -> Expr {
         if let TokenKind::Number(num) = self.tokens[self.pos].kind {
             self.pos += 1;
             Expr::Literal(Literal::Number(num))
         } else {
-            panic!("数値ではないトークンです");
+            self.error_at(self.tokens[self.pos].pos, "数値ではないトークンです");
+            Expr::Invalid
         }
     }
 

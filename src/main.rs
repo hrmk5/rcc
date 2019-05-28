@@ -20,7 +20,7 @@ fn main() {
 
     //println!("{:?}", tokenizer.tokens);
 
-    let mut parser = Parser::new(tokenizer.tokens);
+    let mut parser = Parser::new(&args[1], tokenizer.tokens);
     let expr = parser.parse();
 
     //println!("{:?}", expr);
