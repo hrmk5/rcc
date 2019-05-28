@@ -60,14 +60,28 @@ impl Parser {
         }
     }
 
+    pub fn parse_mul(&mut self) -> Expr {
+        let mut expr = self.parse_term();
+
+        loop {
+            if self.consume(TokenKind::Mul) {
+                expr = Expr::Infix(Infix::Mul, Box::new(expr), Box::new(self.parse_term()));
+            } else if self.consume(TokenKind::Div) {
+                expr = Expr::Infix(Infix::Div, Box::new(expr), Box::new(self.parse_term()));
+            } else {
+                return expr;
+            }
+        }
+    }
+
     pub fn parse(&mut self) -> Expr {
-        let mut expr = self.parse_term(); 
+        let mut expr = self.parse_mul(); 
 
         loop {
             if self.consume(TokenKind::Add) {
-                expr = Expr::Infix(Infix::Add, Box::new(expr), Box::new(self.parse_term()));
+                expr = Expr::Infix(Infix::Add, Box::new(expr), Box::new(self.parse_mul()));
             } else if self.consume(TokenKind::Sub) {
-                expr = Expr::Infix(Infix::Sub, Box::new(expr), Box::new(self.parse_term()));
+                expr = Expr::Infix(Infix::Sub, Box::new(expr), Box::new(self.parse_mul()));
             } else {
                 return expr;
             }
