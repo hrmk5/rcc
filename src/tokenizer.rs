@@ -14,6 +14,9 @@ pub enum TokenKind {
     LessThanOrEqual,
     GreaterThan,
     GreaterThanOrEqual,
+    Ident(String),
+    Semicolon,
+    Assign,
 }
 
 #[derive(Debug)]
@@ -87,7 +90,7 @@ impl Tokenizer {
     fn skip_whitespace(&mut self) {
         loop {
             match self.ch {
-                ' ' | '\t' | '\r' => {},
+                ' ' | '\t' | '\r' | '\n' => {},
                 _ => break,
             }
 
@@ -105,12 +108,18 @@ impl Tokenizer {
         self.add_token(TokenKind::Number(num));
     }
 
+    fn tokenize_ident(&mut self) {
+        self.add_token(TokenKind::Ident(self.ch.to_string()));
+        self.next();
+    }
+
     pub fn tokenize(&mut self) {
         loop {
             self.skip_whitespace();
 
             match self.ch {
                 c if c.is_ascii_digit() => self.tokenize_number(),
+                c if c.is_ascii_alphanumeric() || c == '_' => self.tokenize_ident(),
                 '+' => self.add_token_and_skip(TokenKind::Add, 1),
                 '-' => self.add_token_and_skip(TokenKind::Sub, 1),
                 '*' => self.add_token_and_skip(TokenKind::Mul, 1),
@@ -118,11 +127,13 @@ impl Tokenizer {
                 '(' => self.add_token_and_skip(TokenKind::Lparen, 1),
                 ')' => self.add_token_and_skip(TokenKind::Rparen, 1),
                 '=' if self.next_is('=') => self.add_token_and_skip(TokenKind::Equal, 2),
+                '=' => self.add_token_and_skip(TokenKind::Assign, 1),
                 '!' if self.next_is('=') => self.add_token_and_skip(TokenKind::NotEqual, 2),
                 '<' if self.next_is('=') => self.add_token_and_skip(TokenKind::LessThanOrEqual, 2),
                 '<' => self.add_token_and_skip(TokenKind::LessThan, 1),
                 '>' if self.next_is('=') => self.add_token_and_skip(TokenKind::GreaterThanOrEqual, 2),
                 '>' => self.add_token_and_skip(TokenKind::GreaterThan, 1),
+                ';' => self.add_token_and_skip(TokenKind::Semicolon, 1),
                 '\0' => break,
                 _ => { self.add_error("Unexpected token"); self.next() },
             }
