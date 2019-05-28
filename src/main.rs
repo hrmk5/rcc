@@ -27,7 +27,9 @@ fn main() {
         process::exit(1);
     }
 
-    //println!("{:?}", tokenizer.tokens);
+    //for token in &tokenizer.tokens {
+    //    println!("{:?}", token);
+    //}
 
     let mut parser = Parser::new(tokenizer.tokens);
     let expr = parser.parse();
