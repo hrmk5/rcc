@@ -32,7 +32,7 @@ pub enum Stmt {
 }
 
 #[derive(Debug)]
-pub struct Program(Vec<Stmt>);
+pub struct Program(pub Vec<Stmt>);
 
 #[derive(Debug)]
 pub struct ParseError {
