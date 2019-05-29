@@ -17,6 +17,7 @@ pub enum TokenKind {
     Ident(String),
     Semicolon,
     Assign,
+    Return,
 }
 
 #[derive(Debug)]
@@ -109,8 +110,20 @@ impl Tokenizer {
     }
 
     fn tokenize_ident(&mut self) {
-        self.add_token(TokenKind::Ident(self.ch.to_string()));
-        self.next();
+        let start_pos = self.pos;
+
+        loop {
+            match self.ch {
+                c if c.is_ascii_alphanumeric() || c == '_' => self.next(),
+                _ => break,
+            }
+        }
+
+        let s: String = self.input[start_pos..self.pos].iter().collect();
+        match &*s {
+            "return" => self.add_token(TokenKind::Return),
+            _ => self.add_token(TokenKind::Ident(s)),
+        }
     }
 
     pub fn tokenize(&mut self) {

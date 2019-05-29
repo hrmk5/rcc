@@ -70,11 +70,14 @@ pub fn gen(program: &Program, asm: &mut String) {
     for stmt in &program.0 {
         match stmt {
             Stmt::Expr(expr) => gen_expr(&expr, asm),
+            Stmt::Return(expr) => {
+                gen_expr(&expr, asm);
+                asm.push_str("  pop rax\n");
+                asm.push_str("  mov rsp, rbp\n");
+                asm.push_str("  pop rbp\n");
+                asm.push_str("  ret\n");
+            },
         }
         asm.push_str("  pop rax\n");
     }
-
-    asm.push_str("  mov rsp, rbp\n");
-    asm.push_str("  pop rbp\n");
-    asm.push_str("  ret\n");
 }

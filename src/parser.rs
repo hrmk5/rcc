@@ -29,6 +29,7 @@ pub enum Expr {
 #[derive(Debug)]
 pub enum Stmt {
     Expr(Expr),
+    Return(Expr),
 }
 
 #[derive(Debug)]
@@ -187,12 +188,19 @@ impl Parser {
     }
 
     fn parse_stmt(&mut self) -> Stmt {
-        let expr = self.parse_expr();
+        let stmt = match self.tokens[self.pos].kind {
+            TokenKind::Return => {
+                self.pos += 1;
+                Stmt::Return(self.parse_expr())
+            },
+            _ => Stmt::Expr(self.parse_expr()),
+        };
+
         if !self.consume(TokenKind::Semicolon) {
             self.add_error("';' ではないトークンです");
         }
 
-        Stmt::Expr(expr)
+        stmt
     }
 
     pub fn parse(&mut self) -> Program {
