@@ -1,4 +1,5 @@
 use crate::tokenizer::{Token, TokenKind};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum Infix {
@@ -20,7 +21,7 @@ pub enum Literal {
 #[derive(Debug)]
 pub enum Expr {
     Literal(Literal),
-    Ident(String),
+    Ident(usize),
     Assign(Box<Expr>, Box<Expr>),
     Infix(Infix, Box<Expr>,  Box<Expr>),
     Invalid,
@@ -44,6 +45,7 @@ pub struct ParseError {
 #[derive(Debug)]
 pub struct Parser {
     pub errors: Vec<ParseError>,
+    pub variables: HashMap<String, usize>,
     tokens: Vec<Token>,
     pos: usize,
 }
@@ -54,6 +56,7 @@ impl Parser {
             pos: 0,
             tokens,
             errors: Vec::new(),
+            variables: HashMap::new(),
         }
     }
 
@@ -89,7 +92,15 @@ impl Parser {
             },
             TokenKind::Ident(ref ident) => {
                 self.pos += 1;
-                Expr::Ident(ident.clone())
+                let offset = match self.variables.get(ident) {
+                    Some(offset) => *offset,
+                    None => {
+                        let offset = self.variables.len() * 8;
+                        self.variables.insert(ident.clone(), offset);
+                        offset
+                    },
+                };
+                Expr::Ident(offset)
             },
             _ => {
                 self.add_error("数値でも開きカッコでもないトークンです");

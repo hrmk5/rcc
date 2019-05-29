@@ -44,7 +44,7 @@ fn main() {
     //println!("{:?}", program);
 
     let mut asm = String::new();
-    gen(&program, &mut asm);
+    gen(&program, &parser.variables, &mut asm);
 
     println!("{}", asm);
 }

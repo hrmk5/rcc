@@ -1,9 +1,9 @@
+use std::collections::HashMap;
 use crate::parser::{Program, Stmt, Expr, Literal, Infix};
 
 fn gen_lvalue(expr: &Expr, asm: &mut String) {
     match expr {
-        Expr::Ident(ident) => {
-            let offset = 'z' as u32 - ident.chars().next().unwrap() as u32 + 1 * 8;
+        Expr::Ident(offset) => {
             asm.push_str("  mov rax, rbp\n");
             asm.push_str(&format!("  sub rax, {}\n", offset));
             asm.push_str("  push rax\n");
@@ -58,14 +58,14 @@ fn gen_expr(expr: &Expr, asm: &mut String) {
     };
 }
 
-pub fn gen(program: &Program, asm: &mut String) {
+pub fn gen(program: &Program, variables: &HashMap<String, usize>, asm: &mut String) {
     asm.push_str(".intel_syntax noprefix\n");
     asm.push_str(".global main\n");
     asm.push_str("main:\n");
 
     asm.push_str("  push rbp\n");
     asm.push_str("  mov rbp, rsp\n");
-    asm.push_str("  sub rsp, 208\n");
+    asm.push_str(&format!("  sub rsp, {}\n", variables.len() * 8));
 
     for stmt in &program.0 {
         match stmt {
