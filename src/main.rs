@@ -1,12 +1,12 @@
 mod tokenizer;
 mod parser;
-mod gen;
+//mod gen;
 
 use std::env;
 use std::process;
 use tokenizer::Tokenizer;
 use parser::Parser;
-use gen::gen;
+//use gen::gen;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -32,7 +32,7 @@ fn main() {
     //}
 
     let mut parser = Parser::new(tokenizer.tokens);
-    let expr = parser.parse();
+    let program = parser.parse();
     if parser.errors.len() > 0 {
         for error in parser.errors {
             println!("{}", input);
@@ -41,10 +41,10 @@ fn main() {
         process::exit(1);
     }
 
-    //println!("{:?}", expr);
+    println!("{:?}", program);
 
-    let mut asm = String::new();
-    gen(&expr, &mut asm);
+    //let mut asm = String::new();
+    //gen(&expr, &mut asm);
 
-    println!("{}", asm);
+    //println!("{}", asm);
 }

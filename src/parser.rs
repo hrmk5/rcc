@@ -20,9 +20,19 @@ pub enum Literal {
 #[derive(Debug)]
 pub enum Expr {
     Literal(Literal),
+    Ident(String),
+    Assign(Box<Expr>, Box<Expr>),
     Infix(Infix, Box<Expr>,  Box<Expr>),
     Invalid,
 }
+
+#[derive(Debug)]
+pub enum Stmt {
+    Expr(Expr),
+}
+
+#[derive(Debug)]
+pub struct Program(Vec<Stmt>);
 
 #[derive(Debug)]
 pub struct ParseError {
@@ -66,7 +76,7 @@ impl Parser {
         match self.tokens[self.pos].kind {
             TokenKind::Lparen => {
                 self.pos += 1;
-                let expr = self.parse();
+                let expr = self.parse_expr();
                 if !self.consume(TokenKind::Rparen) {
                     self.add_error("開きカッコに対応する閉じカッコがありません");
                 }
@@ -75,6 +85,10 @@ impl Parser {
             TokenKind::Number(num) => {
                 self.pos += 1;
                 Expr::Literal(Literal::Number(num))
+            },
+            TokenKind::Ident(ref ident) => {
+                self.pos += 1;
+                Expr::Ident(ident.clone())
             },
             _ => {
                 self.add_error("数値でも開きカッコでもないトークンです");
@@ -159,7 +173,33 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Expr {
-        self.parse_equality()
+    fn parse_assign(&mut self) -> Expr {
+        let mut expr = self.parse_equality();
+        if self.consume(TokenKind::Assign) {
+            expr = Expr::Assign(Box::new(expr), Box::new(self.parse_assign()));
+        }
+
+        expr
+    }
+
+    fn parse_expr(&mut self) -> Expr {
+        self.parse_assign()
+    }
+
+    fn parse_stmt(&mut self) -> Stmt {
+        let expr = self.parse_expr();
+        if !self.consume(TokenKind::Semicolon) {
+            self.add_error("';' ではないトークンです");
+        }
+
+        Stmt::Expr(expr)
+    }
+
+    pub fn parse(&mut self) -> Program {
+        let mut stmt_list = Vec::new();
+        while self.tokens[self.pos].kind != TokenKind::EOF {
+            stmt_list.push(self.parse_stmt());
+        }
+        Program(stmt_list)
     }
 }
