@@ -18,6 +18,8 @@ pub enum TokenKind {
     Semicolon,
     Assign,
     Return,
+    If,
+    Else,
 }
 
 #[derive(Debug)]
@@ -122,6 +124,8 @@ impl Tokenizer {
         let s: String = self.input[start_pos..self.pos].iter().collect();
         match &*s {
             "return" => self.add_token(TokenKind::Return),
+            "if" => self.add_token(TokenKind::If),
+            "else" => self.add_token(TokenKind::Else),
             _ => self.add_token(TokenKind::Ident(s)),
         }
     }

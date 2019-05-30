@@ -31,6 +31,7 @@ pub enum Expr {
 pub enum Stmt {
     Expr(Expr),
     Return(Expr),
+    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
 }
 
 #[derive(Debug)]
@@ -202,14 +203,35 @@ impl Parser {
         let stmt = match self.tokens[self.pos].kind {
             TokenKind::Return => {
                 self.pos += 1;
-                Stmt::Return(self.parse_expr())
+                let stmt = Stmt::Return(self.parse_expr());
+                if !self.consume(TokenKind::Semicolon) {
+                    self.add_error("';' ではないトークンです");
+                }
+                stmt
             },
-            _ => Stmt::Expr(self.parse_expr()),
+            TokenKind::If => {
+                self.pos += 1;
+                if !self.consume(TokenKind::Lparen) {
+                    self.add_error("開きカッコではないトークンです");
+                }
+                let expr = self.parse_expr();
+                if !self.consume(TokenKind::Rparen) {
+                    self.add_error("開きカッコに対応する閉じカッコがありません");
+                }
+
+                let if_stmt = Box::new(self.parse_stmt());
+                let else_stmt = if self.consume(TokenKind::Else) { Some(Box::new(self.parse_stmt())) } else { None };
+                Stmt::If(expr, if_stmt, else_stmt)
+            },
+            _ => {
+                let stmt = Stmt::Expr(self.parse_expr());
+                if !self.consume(TokenKind::Semicolon) {
+                    self.add_error("';' ではないトークンです");
+                }
+                stmt
+            },
         };
 
-        if !self.consume(TokenKind::Semicolon) {
-            self.add_error("';' ではないトークンです");
-        }
 
         stmt
     }

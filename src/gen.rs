@@ -3,12 +3,14 @@ use crate::parser::{Program, Stmt, Expr, Literal, Infix};
 
 pub struct Generator {
     pub code: String,
+    label_num: u32,
 }
 
 impl Generator {
     pub fn new() -> Self {
         Generator {
             code: String::new(),
+            label_num: 0,
         }
     }
 
@@ -69,6 +71,41 @@ impl Generator {
         };
     }
 
+    pub fn gen_stmt(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::Expr(expr) => self.gen_expr(&expr),
+            Stmt::Return(expr) => {
+                self.gen_expr(&expr);
+                self.code.push_str("  pop rax\n");
+                self.code.push_str("  mov rsp, rbp\n");
+                self.code.push_str("  pop rbp\n");
+                self.code.push_str("  ret\n");
+            },
+            Stmt::If(cond, if_stmt, else_stmt) => {
+                self.gen_expr(&cond);
+                self.code.push_str("  pop rax\n");
+                self.code.push_str("  cmp rax, 0\n");
+                self.label_num += 1;
+                let label_num = self.label_num;
+
+                // else 節がある場合
+                if let Some(else_stmt) = else_stmt {
+                    self.code.push_str(&format!("  je .Lelse{}\n", label_num));
+                    self.gen_stmt(if_stmt);
+                    self.code.push_str(&format!("  jmp .Lend{}\n", label_num));
+                    self.code.push_str(&format!(".Lelse{}:\n", label_num));
+                    self.gen_stmt(else_stmt);
+                } else {
+                    self.code.push_str(&format!("  je .Lend{}\n", label_num));
+                    self.gen_stmt(if_stmt);
+                }
+
+                self.code.push_str(&format!(".Lend{}:\n", label_num));
+            },
+            _ => {},
+        }
+    }
+
     pub fn gen(&mut self, program: &Program, variables: &HashMap<String, usize>) {
         self.code.push_str(".intel_syntax noprefix\n");
         self.code.push_str(".global main\n");
@@ -79,16 +116,7 @@ impl Generator {
         self.code.push_str(&format!("  sub rsp, {}\n", variables.len() * 8));
 
         for stmt in &program.0 {
-            match stmt {
-                Stmt::Expr(expr) => self.gen_expr(&expr),
-                Stmt::Return(expr) => {
-                    self.gen_expr(&expr);
-                    self.code.push_str("  pop rax\n");
-                    self.code.push_str("  mov rsp, rbp\n");
-                    self.code.push_str("  pop rbp\n");
-                    self.code.push_str("  ret\n");
-                },
-            }
+            self.gen_stmt(&stmt);
             self.code.push_str("  pop rax\n");
         }
     }
