@@ -34,6 +34,7 @@ pub enum Stmt {
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     While(Expr, Box<Stmt>),
     For(Option<Expr>, Option<Expr>, Option<Expr>, Box<Stmt>),
+    Block(Vec<Stmt>),
 }
 
 #[derive(Debug)]
@@ -260,6 +261,21 @@ impl Parser {
                 let expr3  = parse_expr_in_for(true);
 
                 Stmt::For(expr1, expr2, expr3, Box::new(self.parse_stmt()))
+            },
+            TokenKind::Lbrace => {
+                self.pos += 1;
+                let mut stmt_list = Vec::<Stmt>::new();
+                loop {
+                    stmt_list.push(self.parse_stmt());
+                    if self.consume(TokenKind::Rbrace) {
+                        break;
+                    } else if self.consume(TokenKind::EOF) {
+                        self.add_error("'{' に対応する '}' がありません");
+                        break;
+                    }
+                }
+
+                Stmt::Block(stmt_list)
             },
             _ => {
                 let stmt = Stmt::Expr(self.parse_expr());

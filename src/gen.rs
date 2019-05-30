@@ -149,6 +149,12 @@ impl Generator {
                 self.code.push_str(&format!("  jmp .Lbegin{}\n", label_num));
                 self.code.push_str(&format!(".Lend{}:\n", label_num));
             },
+            Stmt::Block(stmt_list) => {
+                for stmt in stmt_list {
+                    self.gen_stmt(stmt);
+                    self.code.push_str("  pop rax\n");
+                }
+            },
             _ => {},
         }
     }
