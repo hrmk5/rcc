@@ -33,6 +33,7 @@ pub enum Stmt {
     Return(Expr),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     While(Expr, Box<Stmt>),
+    For(Option<Expr>, Option<Expr>, Option<Expr>, Box<Stmt>),
 }
 
 #[derive(Debug)]
@@ -235,6 +236,30 @@ impl Parser {
                 }
 
                 Stmt::While(expr, Box::new(self.parse_stmt()))
+            },
+            TokenKind::For => {
+                self.pos += 1;
+                if !self.consume(TokenKind::Lparen) {
+                    self.add_error("開きカッコではないトークンです");
+                }
+
+                let mut parse_expr_in_for = |is_last: bool| -> Option<Expr> {
+                    if self.consume(TokenKind::Semicolon) { 
+                        None
+                    } else {
+                        let expr = self.parse_expr();
+                        if !self.consume(if !is_last { TokenKind::Semicolon } else { TokenKind::Rparen }) {
+                            self.add_error("';' ではないトークンです");
+                        }
+                        Some(expr)
+                    }
+                };
+
+                let expr1 = parse_expr_in_for(false);
+                let expr2 = parse_expr_in_for(false);
+                let expr3  = parse_expr_in_for(true);
+
+                Stmt::For(expr1, expr2, expr3, Box::new(self.parse_stmt()))
             },
             _ => {
                 let stmt = Stmt::Expr(self.parse_expr());

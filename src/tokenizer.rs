@@ -21,6 +21,7 @@ pub enum TokenKind {
     If,
     Else,
     While,
+    For,
 }
 
 #[derive(Debug)]
@@ -128,6 +129,7 @@ impl Tokenizer {
             "if" => self.add_token(TokenKind::If),
             "else" => self.add_token(TokenKind::Else),
             "while" => self.add_token(TokenKind::While),
+            "for" => self.add_token(TokenKind::For),
             _ => self.add_token(TokenKind::Ident(s)),
         }
     }
