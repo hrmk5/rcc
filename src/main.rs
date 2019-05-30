@@ -4,6 +4,8 @@ mod gen;
 
 use std::env;
 use std::process;
+use std::fs::File;
+use std::io::Read;
 use tokenizer::Tokenizer;
 use parser::Parser;
 use gen::Generator;
@@ -15,9 +17,12 @@ fn main() {
         process::exit(1);
     }
 
-    let input = &args[1];
+    let filepath = &args[1];
+    let mut file = File::open(filepath).expect("Unable to open file");
+    let mut input = String::new();
+    file.read_to_string(&mut input).expect("Unable to read file");
 
-    let mut tokenizer = Tokenizer::new(input);
+    let mut tokenizer = Tokenizer::new(&input);
     tokenizer.tokenize();
     if tokenizer.errors.len() > 0 {
         for error in tokenizer.errors {
