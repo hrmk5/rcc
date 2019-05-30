@@ -6,7 +6,7 @@ use std::env;
 use std::process;
 use tokenizer::Tokenizer;
 use parser::Parser;
-use gen::gen;
+use gen::Generator;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -43,8 +43,8 @@ fn main() {
 
     //println!("{:?}", program);
 
-    let mut asm = String::new();
-    gen(&program, &parser.variables, &mut asm);
+    let mut generator = Generator::new();
+    generator.gen(&program, &parser.variables);
 
-    println!("{}", asm);
+    println!("{}", generator.code);
 }
