@@ -20,6 +20,7 @@ pub enum TokenKind {
     Return,
     If,
     Else,
+    While,
 }
 
 #[derive(Debug)]
@@ -126,6 +127,7 @@ impl Tokenizer {
             "return" => self.add_token(TokenKind::Return),
             "if" => self.add_token(TokenKind::If),
             "else" => self.add_token(TokenKind::Else),
+            "while" => self.add_token(TokenKind::While),
             _ => self.add_token(TokenKind::Ident(s)),
         }
     }

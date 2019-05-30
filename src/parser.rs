@@ -32,6 +32,7 @@ pub enum Stmt {
     Expr(Expr),
     Return(Expr),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
+    While(Expr, Box<Stmt>),
 }
 
 #[derive(Debug)]
@@ -222,6 +223,18 @@ impl Parser {
                 let if_stmt = Box::new(self.parse_stmt());
                 let else_stmt = if self.consume(TokenKind::Else) { Some(Box::new(self.parse_stmt())) } else { None };
                 Stmt::If(expr, if_stmt, else_stmt)
+            },
+            TokenKind::While => {
+                self.pos += 1;
+                if !self.consume(TokenKind::Lparen) {
+                    self.add_error("開きカッコではないトークンです");
+                }
+                let expr = self.parse_expr();
+                if !self.consume(TokenKind::Rparen) {
+                    self.add_error("開きカッコに対応する閉じカッコがありません");
+                }
+
+                Stmt::While(expr, Box::new(self.parse_stmt()))
             },
             _ => {
                 let stmt = Stmt::Expr(self.parse_expr());

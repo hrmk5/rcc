@@ -102,6 +102,24 @@ impl Generator {
 
                 self.code.push_str(&format!(".Lend{}:\n", label_num));
             },
+            Stmt::While(expr, stmt) => {
+                self.label_num += 1;
+                let label_num = self.label_num;
+
+                self.code.push_str(&format!(".Lbegin{}:\n", label_num));
+
+                // 条件式
+                self.gen_expr(expr);
+                self.code.push_str("  pop rax\n");
+                self.code.push_str("  cmp rax, 0\n");
+                self.code.push_str(&format!("  je .Lend{}\n", label_num));
+
+                // 文
+                self.gen_stmt(stmt);
+                self.code.push_str(&format!("  jmp .Lbegin{}\n", label_num));
+
+                self.code.push_str(&format!(".Lend{}:\n", label_num));
+            },
             _ => {},
         }
     }
