@@ -66,12 +66,25 @@ impl Generator {
                 });
 
                 self.code.push_str("  push rax\n");
-            }
+            },
+            Expr::Call(name, args) => {
+                for arg_expr in args {
+                    self.gen_expr(arg_expr);
+                }
+                let registers = ["r9", "r8", "rcx", "rdx", "rsi", "rdi"];
+                for register in registers[6 - args.len()..].iter() {
+                    self.code.push_str(&format!("  pop {}\n", register));
+                }
+                // TODO: RSP を調整する
+                // 調整してないけど動く
+                self.code.push_str(&format!("  call {}\n", name));
+            },
             _ => {},
         };
     }
 
     pub fn gen_stmt(&mut self, stmt: &Stmt) {
+        #[allow(unreachable_patterns)]
         match stmt {
             Stmt::Expr(expr) => self.gen_expr(&expr),
             Stmt::Return(expr) => {

@@ -24,6 +24,7 @@ pub enum TokenKind {
     Else,
     While,
     For,
+    Comma,
 }
 
 #[derive(Debug)]
@@ -159,6 +160,7 @@ impl Tokenizer {
                 '>' if self.next_is('=') => self.add_token_and_skip(TokenKind::GreaterThanOrEqual, 2),
                 '>' => self.add_token_and_skip(TokenKind::GreaterThan, 1),
                 ';' => self.add_token_and_skip(TokenKind::Semicolon, 1),
+                ',' => self.add_token_and_skip(TokenKind::Comma, 1),
                 '\0' => break,
                 _ => { self.add_error("Unexpected token"); self.next() },
             }

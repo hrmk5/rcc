@@ -24,6 +24,7 @@ pub enum Expr {
     Ident(usize),
     Assign(Box<Expr>, Box<Expr>),
     Infix(Infix, Box<Expr>,  Box<Expr>),
+    Call(String, Vec<Expr>),
     Invalid,
 }
 
@@ -81,6 +82,46 @@ impl Parser {
     }
 
     fn parse_term(&mut self) -> Expr {
+        let (is_ident, ident) = match self.tokens[self.pos].kind {
+            TokenKind::Ident(ref ident) => (true, ident.clone()),
+            _ => (false, String::new()),
+        };
+
+        if is_ident {
+            self.pos += 1;
+
+            if self.consume(TokenKind::Lparen) {
+                // 関数呼び出し
+                let mut args = Vec::<Expr>::new();
+                loop {
+                    args.push(self.parse_expr());
+                    if self.consume(TokenKind::Rparen) {
+                        break;
+                    } else if self.consume(TokenKind::EOF) {
+                        self.add_error("開きカッコに対応する閉じカッコがありません");
+                        break;
+                    }
+
+                    if !self.consume(TokenKind::Comma) {
+                        self.add_error("',' ではないトークンです");
+                    }
+                }
+
+                return Expr::Call(ident, args);
+            } else {
+                // 変数
+                let offset = match self.variables.get(&ident) {
+                    Some(offset) => *offset,
+                    None => {
+                        let offset = self.variables.len() * 8;
+                        self.variables.insert(ident.clone(), offset);
+                        offset
+                    },
+                };
+                return Expr::Ident(offset);
+            }
+        }
+
         match self.tokens[self.pos].kind {
             TokenKind::Lparen => {
                 self.pos += 1;
@@ -93,18 +134,6 @@ impl Parser {
             TokenKind::Number(num) => {
                 self.pos += 1;
                 Expr::Literal(Literal::Number(num))
-            },
-            TokenKind::Ident(ref ident) => {
-                self.pos += 1;
-                let offset = match self.variables.get(ident) {
-                    Some(offset) => *offset,
-                    None => {
-                        let offset = self.variables.len() * 8;
-                        self.variables.insert(ident.clone(), offset);
-                        offset
-                    },
-                };
-                Expr::Ident(offset)
             },
             _ => {
                 self.add_error("数値でも開きカッコでもないトークンです");
