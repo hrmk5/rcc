@@ -10,6 +10,12 @@ use tokenizer::Tokenizer;
 use parser::Parser;
 use gen::Generator;
 
+enum ShowType {
+    Token,
+    Program,
+    Code,
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -22,6 +28,15 @@ fn main() {
     let mut input = String::new();
     file.read_to_string(&mut input).expect("Unable to read file");
 
+    let show_type = match args.get(2) {
+        Some(s) => match &s[..] {
+            "token" => ShowType::Token,
+            "program" => ShowType::Program,
+            _ => ShowType::Code,
+        },
+        _ => ShowType::Code,
+    };
+
     let mut tokenizer = Tokenizer::new(&input);
     tokenizer.tokenize();
     if tokenizer.errors.len() > 0 {
@@ -32,9 +47,11 @@ fn main() {
         process::exit(1);
     }
 
-    //for token in &tokenizer.tokens {
-    //    println!("{:?}", token);
-    //}
+    if let ShowType::Token = show_type {
+        for token in &tokenizer.tokens {
+            println!("{:?}", token);
+        }
+    }
 
     let mut parser = Parser::new(tokenizer.tokens);
     let program = parser.parse();
@@ -46,10 +63,14 @@ fn main() {
         process::exit(1);
     }
 
-    //println!("{:?}", program);
+    if let ShowType::Program = show_type {
+        println!("{:?}", program);
+    }
 
     let mut generator = Generator::new();
     generator.gen(&program, &parser.variables);
 
-    println!("{}", generator.code);
+    if let ShowType::Code = show_type {
+        println!("{}", generator.code);
+    }
 }
