@@ -27,6 +27,38 @@ pub enum TokenKind {
     Comma,
 }
 
+impl ToString for TokenKind {
+    fn to_string(&self) -> String {
+        String::from(match self {
+            TokenKind::Number(_) => "number",
+            TokenKind::Add => "+",
+            TokenKind::Sub => "-",
+            TokenKind::Mul => "*",
+            TokenKind::Div => "/",
+            TokenKind::Lparen => "(",
+            TokenKind::Rparen => ")",
+            TokenKind::Lbrace => "{",
+            TokenKind::Rbrace => "}",
+            TokenKind::EOF => "EOF",
+            TokenKind::Equal => "==",
+            TokenKind::NotEqual => "!=",
+            TokenKind::LessThan => "<",
+            TokenKind::LessThanOrEqual => "<=",
+            TokenKind::GreaterThan => ">",
+            TokenKind::GreaterThanOrEqual => ">=",
+            TokenKind::Ident(_) => "identifier",
+            TokenKind::Semicolon => ";",
+            TokenKind::Assign => "=",
+            TokenKind::Return => "return",
+            TokenKind::If => "if",
+            TokenKind::Else => "else",
+            TokenKind::While => "while",
+            TokenKind::For => "for",
+            TokenKind::Comma => ",",
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct Token {
     pub kind: TokenKind,

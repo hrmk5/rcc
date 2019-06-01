@@ -63,6 +63,14 @@ pub struct Parser {
     pos: usize,
 }
 
+macro_rules! expect {
+    ($self: ident, $e: expr) => {
+        if !$self.consume($e) {
+            $self.add_error(&format!("'{}' ではないトークンです", $e.to_string()));
+        }
+    };
+}
+
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Parser {
@@ -114,9 +122,7 @@ impl Parser {
                         break;
                     }
 
-                    if !self.consume(TokenKind::Comma) {
-                        self.add_error("',' ではないトークンです");
-                    }
+                    expect!(self, TokenKind::Comma);
                 }
 
                 return Expr::Call(ident, args);
@@ -248,16 +254,16 @@ impl Parser {
             TokenKind::Return => {
                 self.pos += 1;
                 let stmt = Stmt::Return(self.parse_expr());
-                if !self.consume(TokenKind::Semicolon) {
-                    self.add_error("';' ではないトークンです");
-                }
+
+                expect!(self, TokenKind::Semicolon);
+
                 stmt
             },
             TokenKind::If => {
                 self.pos += 1;
-                if !self.consume(TokenKind::Lparen) {
-                    self.add_error("開きカッコではないトークンです");
-                }
+
+                expect!(self, TokenKind::Lparen);
+
                 let expr = self.parse_expr();
                 if !self.consume(TokenKind::Rparen) {
                     self.add_error("開きカッコに対応する閉じカッコがありません");
@@ -269,9 +275,9 @@ impl Parser {
             },
             TokenKind::While => {
                 self.pos += 1;
-                if !self.consume(TokenKind::Lparen) {
-                    self.add_error("開きカッコではないトークンです");
-                }
+
+                expect!(self, TokenKind::Lparen);
+
                 let expr = self.parse_expr();
                 if !self.consume(TokenKind::Rparen) {
                     self.add_error("開きカッコに対応する閉じカッコがありません");
@@ -281,18 +287,16 @@ impl Parser {
             },
             TokenKind::For => {
                 self.pos += 1;
-                if !self.consume(TokenKind::Lparen) {
-                    self.add_error("開きカッコではないトークンです");
-                }
+                expect!(self, TokenKind::Lparen);
 
                 let mut parse_expr_in_for = |is_last: bool| -> Option<Expr> {
                     if self.consume(TokenKind::Semicolon) { 
                         None
                     } else {
                         let expr = self.parse_expr();
-                        if !self.consume(if !is_last { TokenKind::Semicolon } else { TokenKind::Rparen }) {
-                            self.add_error("';' ではないトークンです");
-                        }
+
+                        expect!(self, if !is_last { TokenKind::Semicolon } else { TokenKind::Rparen });
+
                         Some(expr)
                     }
                 };
@@ -320,9 +324,7 @@ impl Parser {
             },
             _ => {
                 let stmt = Stmt::Expr(self.parse_expr());
-                if !self.consume(TokenKind::Semicolon) {
-                    self.add_error("';' ではないトークンです");
-                }
+                expect!(self, TokenKind::Semicolon);
                 stmt
             },
         };
@@ -339,9 +341,7 @@ impl Parser {
 
         if is_ident {
             self.pos += 1;
-            if !self.consume(TokenKind::Lparen) {
-                self.add_error("'(' ではないトークンです");
-            }
+            expect!(self, TokenKind::Lparen);
 
             // 引数
             let mut variables = HashMap::<String, usize>::new();
