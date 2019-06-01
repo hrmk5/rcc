@@ -5,3 +5,4 @@ authors = ["masuke5 <s.zerogoichi@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+colored = "1.8"

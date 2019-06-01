@@ -9,6 +9,7 @@ use std::io::Read;
 use tokenizer::Tokenizer;
 use parser::Parser;
 use gen::Generator;
+use colored::*;
 
 enum ShowType {
     Token,
@@ -59,8 +60,9 @@ fn main() {
     let program = parser.parse();
     if parser.errors.len() > 0 {
         for error in parser.errors {
-            println!("{}", lines[error.start_line]);
-            println!("{}{} {}", " ".repeat(error.start_col), "^".repeat(error.end_col - error.start_col), error.message);
+            let line = error.start_line.to_string();
+            println!("{} {}", format!("{} |", line).bright_cyan(), lines[error.start_line]);
+            println!("{}{} {}", " ".repeat(error.start_col + line.chars().count() + 3).bright_red(), "^".repeat(error.end_col - error.start_col).bright_red(), error.message.bright_red());
         }
         process::exit(1);
     }
