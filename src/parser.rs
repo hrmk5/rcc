@@ -39,7 +39,12 @@ pub enum Stmt {
 }
 
 #[derive(Debug)]
-pub struct Program(pub Vec<Stmt>);
+pub enum Declaration {
+    Func(String, Vec<String>, HashMap<String, usize>, Stmt),
+}
+
+#[derive(Debug)]
+pub struct Program(pub Vec<Declaration>);
 
 #[derive(Debug)]
 pub struct ParseError {
@@ -50,7 +55,7 @@ pub struct ParseError {
 #[derive(Debug)]
 pub struct Parser {
     pub errors: Vec<ParseError>,
-    pub variables: HashMap<String, usize>,
+    variables: HashMap<String, usize>,
     tokens: Vec<Token>,
     pos: usize,
 }
@@ -319,11 +324,61 @@ impl Parser {
         stmt
     }
 
-    pub fn parse(&mut self) -> Program {
-        let mut stmt_list = Vec::new();
-        while self.tokens[self.pos].kind != TokenKind::EOF {
-            stmt_list.push(self.parse_stmt());
+    pub fn parse_declaration(&mut self) -> Option<Declaration> {
+        let (is_ident, ident) = match self.tokens[self.pos].kind {
+            TokenKind::Ident(ref ident) => (true, ident.clone()),
+            _ => (false, String::new()),
+        };
+
+        if is_ident {
+            self.pos += 1;
+            if !self.consume(TokenKind::Lparen) {
+                self.add_error("'(' ではないトークンです");
+            }
+
+            // 引数
+            let mut variables = HashMap::<String, usize>::new();
+            let mut args = Vec::new();
+            loop {
+                if let TokenKind::Ident(ref ident) = self.tokens[self.pos].kind {
+                    self.pos += 1;
+                    variables.insert(ident.clone(), variables.len() * 8);
+                    args.push(ident.clone());
+                }
+
+                if self.consume(TokenKind::Rparen) {
+                    break;
+                } else if !self.consume(TokenKind::Comma) {
+                    self.add_error("',' ではないトークンです'");
+                }
+            }
+
+            self.variables = variables;
+
+            let stmt = self.parse_stmt();
+            match stmt {
+                Stmt::Block(_) => {},
+                _ => self.add_error("ブロックではありません"),
+            };
+
+            return Some(Declaration::Func(ident, args, self.variables.clone(), stmt));
         }
-        Program(stmt_list)
+
+        match self.tokens[self.pos].kind {
+            _ => {
+                self.add_error("関数定義ではありません");
+                None
+            },
+        }
+    }
+
+    pub fn parse(&mut self) -> Program {
+        let mut declarations = Vec::new();
+        while self.tokens[self.pos].kind != TokenKind::EOF {
+            if let Some(declaration) = self.parse_declaration() {
+                declarations.push(declaration);
+            }
+        }
+        Program(declarations)
     }
 }

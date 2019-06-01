@@ -1,10 +1,11 @@
-use std::collections::HashMap;
-use crate::parser::{Program, Stmt, Expr, Literal, Infix};
+use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration};
 
 pub struct Generator {
     pub code: String,
     label_num: u32,
 }
+
+const ARG_REGISTERS: [&str; 6] = ["r9", "r8", "rcx", "rdx", "rsi", "rdi"];
 
 impl Generator {
     pub fn new() -> Self {
@@ -18,7 +19,7 @@ impl Generator {
         match expr {
             Expr::Ident(offset) => {
                 self.code.push_str("  mov rax, rbp\n");
-                self.code.push_str(&format!("  sub rax, {}\n", offset));
+                self.code.push_str(&format!("  sub rax, {}\n", offset + 8));
                 self.code.push_str("  push rax\n");
             },
             _ => {
@@ -71,13 +72,13 @@ impl Generator {
                 for arg_expr in args {
                     self.gen_expr(arg_expr);
                 }
-                let registers = ["r9", "r8", "rcx", "rdx", "rsi", "rdi"];
-                for register in registers[6 - args.len()..].iter() {
+                for register in ARG_REGISTERS[6 - args.len()..].iter() {
                     self.code.push_str(&format!("  pop {}\n", register));
                 }
                 // TODO: RSP を調整する
                 // 調整してないけど動く
                 self.code.push_str(&format!("  call {}\n", name));
+                self.code.push_str("  push rax\n");
             },
             _ => {},
         };
@@ -165,25 +166,40 @@ impl Generator {
             Stmt::Block(stmt_list) => {
                 for stmt in stmt_list {
                     self.gen_stmt(stmt);
-                    self.code.push_str("  pop rax\n");
+                    match stmt {
+                        Stmt::Return(_) => {},
+                        _ => self.code.push_str("  pop rax\n"),
+                    };
                 }
             },
             _ => {},
         }
     }
 
-    pub fn gen(&mut self, program: &Program, variables: &HashMap<String, usize>) {
+    pub fn gen_declaration(&mut self, declaration: &Declaration) {
+        match declaration {
+            Declaration::Func(name, args, variables, block) => {
+                self.code.push_str(&format!("{}:\n", name));
+
+                self.code.push_str("  push rbp\n");
+                self.code.push_str("  mov rbp, rsp\n");
+                self.code.push_str(&format!("  sub rsp, {}\n", variables.len() * 8));
+
+                // スタックに引数の値をプッシュする
+                for arg in args {
+                    self.code.push_str(&format!("  mov [rbp-{}], {}\n", variables[arg] + 8, ARG_REGISTERS[5 - variables[arg] / 8]));
+                }
+
+                self.gen_stmt(block);
+            },
+        }
+    }
+
+    pub fn gen(&mut self, program: &Program) {
         self.code.push_str(".intel_syntax noprefix\n");
         self.code.push_str(".global main\n");
-        self.code.push_str("main:\n");
-
-        self.code.push_str("  push rbp\n");
-        self.code.push_str("  mov rbp, rsp\n");
-        self.code.push_str(&format!("  sub rsp, {}\n", variables.len() * 8));
-
-        for stmt in &program.0 {
-            self.gen_stmt(&stmt);
-            self.code.push_str("  pop rax\n");
+        for declaration in &program.0 {
+            self.gen_declaration(declaration);
         }
     }
 }

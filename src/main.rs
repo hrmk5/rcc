@@ -68,7 +68,7 @@ fn main() {
     }
 
     let mut generator = Generator::new();
-    generator.gen(&program, &parser.variables);
+    generator.gen(&program);
 
     if let ShowType::Code = show_type {
         println!("{}", generator.code);
