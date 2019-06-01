@@ -30,7 +30,10 @@ pub enum TokenKind {
 #[derive(Debug)]
 pub struct Token {
     pub kind: TokenKind,
-    pub pos: usize,
+    pub start_line: usize,
+    pub start_col: usize,
+    pub end_line: usize,
+    pub end_col: usize,
 }
 
 #[derive(Debug)]
@@ -46,6 +49,8 @@ pub struct Tokenizer {
     input: Vec<char>,
     pos: usize,
     ch: char,
+    line: usize,
+    col: usize,
 }
 
 impl Tokenizer {
@@ -56,11 +61,14 @@ impl Tokenizer {
             pos: 0,
             ch: input.chars().next().unwrap_or('\0'),
             errors: Vec::new(),
+            line: 0,
+            col: 0,
         }
     }
 
     fn next(&mut self) {
         self.pos += 1;
+        self.col += 1;
         self.ch = match self.input.get(self.pos) {
             Some(ch) => *ch, 
             None => '\0',
@@ -74,15 +82,18 @@ impl Tokenizer {
         });
     }
 
-    fn add_token(&mut self, kind: TokenKind) {
+    fn add_token(&mut self, kind: TokenKind, start_col: usize, end_col: usize) {
         self.tokens.push(Token {
             kind,
-            pos: self.pos,
+            start_line: self.line,
+            end_line: self.line,
+            start_col,
+            end_col,
         });
     }
 
     fn add_token_and_skip(&mut self, kind: TokenKind, skip: usize) {
-        self.add_token(kind);
+        self.add_token(kind, self.col, self.col + skip);
         for _ in 0..skip {
             self.next();
         }
@@ -98,26 +109,31 @@ impl Tokenizer {
     fn skip_whitespace(&mut self) {
         loop {
             match self.ch {
-                ' ' | '\t' | '\r' | '\n' => {},
+                ' ' | '\t' | '\r' => self.next(),
+                '\n' => {
+                    self.next();
+                    self.line += 1;
+                    self.col = 0;
+                },
                 _ => break,
             }
-
-            self.next();
         }
     }
 
     fn tokenize_number(&mut self) {
+        let start_col = self.col;
         let mut num: i32 = 0;
         while self.ch.is_ascii_digit() {
             num = (10 * num) + self.ch.to_digit(10).unwrap() as i32;
             self.next();
         }
 
-        self.add_token(TokenKind::Number(num));
+        self.add_token(TokenKind::Number(num), start_col, self.col);
     }
 
     fn tokenize_ident(&mut self) {
         let start_pos = self.pos;
+        let start_col = self.col;
 
         loop {
             match self.ch {
@@ -127,14 +143,14 @@ impl Tokenizer {
         }
 
         let s: String = self.input[start_pos..self.pos].iter().collect();
-        match &*s {
-            "return" => self.add_token(TokenKind::Return),
-            "if" => self.add_token(TokenKind::If),
-            "else" => self.add_token(TokenKind::Else),
-            "while" => self.add_token(TokenKind::While),
-            "for" => self.add_token(TokenKind::For),
-            _ => self.add_token(TokenKind::Ident(s)),
-        }
+        self.add_token(match &*s {
+            "return" => TokenKind::Return,
+            "if" => TokenKind::If,
+            "else" => TokenKind::Else,
+            "while" => TokenKind::While,
+            "for" => TokenKind::For,
+            _ => TokenKind::Ident(s),
+        }, start_col, self.col);
     }
 
     pub fn tokenize(&mut self) {
@@ -166,6 +182,6 @@ impl Tokenizer {
             }
         }
 
-        self.add_token(TokenKind::EOF);
+        self.add_token(TokenKind::EOF, self.col, self.col);
     }
 }

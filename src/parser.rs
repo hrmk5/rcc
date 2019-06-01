@@ -48,7 +48,10 @@ pub struct Program(pub Vec<Declaration>);
 
 #[derive(Debug)]
 pub struct ParseError {
-    pub pos: usize,
+    pub start_line: usize,
+    pub start_col: usize,
+    pub end_line: usize,
+    pub end_col: usize,
     pub message: String,
 }
 
@@ -80,8 +83,12 @@ impl Parser {
     }
 
     fn add_error(&mut self, msg: &str) {
+        let token = &self.tokens[self.pos];
         self.errors.push(ParseError {
-            pos: self.tokens[self.pos].pos,
+            start_line: token.start_line,
+            start_col: token.start_col,
+            end_line: token.end_line,
+            end_col: token.end_col,
             message: String::from(msg),
         });
     }

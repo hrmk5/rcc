@@ -28,6 +28,8 @@ fn main() {
     let mut input = String::new();
     file.read_to_string(&mut input).expect("Unable to read file");
 
+    let lines: Vec<&str> = input.split('\n').collect();
+
     let show_type = match args.get(2) {
         Some(s) => match &s[..] {
             "token" => ShowType::Token,
@@ -57,8 +59,8 @@ fn main() {
     let program = parser.parse();
     if parser.errors.len() > 0 {
         for error in parser.errors {
-            println!("{}", input);
-            println!("{}^ {}", " ".repeat(error.pos), error.message);
+            println!("{}", lines[error.start_line]);
+            println!("{}{} {}", " ".repeat(error.start_col), "^".repeat(error.end_col - error.start_col), error.message);
         }
         process::exit(1);
     }
