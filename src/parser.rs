@@ -375,10 +375,16 @@ impl Parser {
                         let mut variables = HashMap::<String, usize>::new();
                         let mut args = Vec::new();
                         loop {
-                            if let TokenKind::Ident(ref ident) = self.tokens[self.pos].kind {
+                            if let TokenKind::Int = self.tokens[self.pos].kind {
                                 self.pos += 1;
-                                variables.insert(ident.clone(), variables.len() * 8);
-                                args.push(ident.clone());
+                                if let TokenKind::Ident(ref ident) = self.tokens[self.pos].kind {
+                                    self.pos += 1;
+                                    variables.insert(ident.clone(), variables.len() * 8);
+                                    args.push(ident.clone());
+                                } else {
+                                    self.pos += 1;
+                                    self.add_error("引数の名前がありません");
+                                }
                             }
 
                             if self.consume(TokenKind::Rparen) {
