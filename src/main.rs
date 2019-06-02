@@ -60,7 +60,7 @@ fn main() {
     let program = parser.parse();
     if parser.errors.len() > 0 {
         for error in parser.errors {
-            let line = error.start_line.to_string();
+            let line = (error.start_line + 1).to_string();
             println!("{} {}", format!("{} |", line).bright_cyan(), lines[error.start_line]);
             println!("{}{} {}", " ".repeat(error.start_col + line.chars().count() + 3).bright_red(), "^".repeat(error.end_col - error.start_col).bright_red(), error.message.bright_red());
         }
