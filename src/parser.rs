@@ -67,7 +67,7 @@ pub struct Parser {
 macro_rules! expect {
     ($self: ident, $e: expr) => {
         if !$self.consume($e) {
-            $self.add_error(&format!("{}: '{}' ではないトークンです", line!(), $e.to_string()));
+            $self.add_error(&format!("'{}' ではないトークンです", $e.to_string()));
         }
     };
 }
@@ -363,46 +363,50 @@ impl Parser {
     }
 
     pub fn parse_declaration(&mut self) -> Option<Declaration> {
-        let (is_ident, ident) = match self.tokens[self.pos].kind {
-            TokenKind::Ident(ref ident) => (true, ident.clone()),
-            _ => (false, String::new()),
-        };
-
-        if is_ident {
-            self.pos += 1;
-            expect!(self, TokenKind::Lparen);
-
-            // 引数
-            let mut variables = HashMap::<String, usize>::new();
-            let mut args = Vec::new();
-            loop {
-                if let TokenKind::Ident(ref ident) = self.tokens[self.pos].kind {
-                    self.pos += 1;
-                    variables.insert(ident.clone(), variables.len() * 8);
-                    args.push(ident.clone());
-                }
-
-                if self.consume(TokenKind::Rparen) {
-                    break;
-                } else if !self.consume(TokenKind::Comma) {
-                    self.add_error("',' か ')' ではないトークンです");
-                    break;
-                }
-            }
-
-            self.variables = variables;
-
-            let stmt = self.parse_stmt();
-            match stmt {
-                Stmt::Block(_) => {},
-                _ => self.add_error("ブロックではありません"),
-            };
-
-            return Some(Declaration::Func(ident, args, self.variables.clone(), stmt));
-        }
-
         match self.tokens[self.pos].kind {
+            TokenKind::Int => {
+                self.pos += 1;
+                let ident = self.expect_ident();
+                match ident {
+                    Some(ident) => {
+                        expect!(self, TokenKind::Lparen);
+
+                        // 引数
+                        let mut variables = HashMap::<String, usize>::new();
+                        let mut args = Vec::new();
+                        loop {
+                            if let TokenKind::Ident(ref ident) = self.tokens[self.pos].kind {
+                                self.pos += 1;
+                                variables.insert(ident.clone(), variables.len() * 8);
+                                args.push(ident.clone());
+                            }
+
+                            if self.consume(TokenKind::Rparen) {
+                                break;
+                            } else if !self.consume(TokenKind::Comma) {
+                                self.add_error("',' か ')' ではないトークンです");
+                                break;
+                            }
+                        }
+
+                        self.variables = variables;
+
+                        let stmt = self.parse_stmt();
+                        match stmt {
+                            Stmt::Block(_) => {},
+                            _ => self.add_error("ブロックではありません"),
+                        };
+
+                        Some(Declaration::Func(ident, args, self.variables.clone(), stmt))
+                    },
+                    None => {
+                        self.add_error("識別子ではありません");
+                        None
+                    }
+                }
+            },
             _ => {
+                self.pos += 1;
                 self.add_error("関数定義ではありません");
                 None
             },
