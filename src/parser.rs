@@ -36,6 +36,7 @@ pub enum Stmt {
     While(Expr, Box<Stmt>),
     For(Option<Expr>, Option<Expr>, Option<Expr>, Box<Stmt>),
     Block(Vec<Stmt>),
+    Define(usize),
 }
 
 #[derive(Debug)]
@@ -66,7 +67,7 @@ pub struct Parser {
 macro_rules! expect {
     ($self: ident, $e: expr) => {
         if !$self.consume($e) {
-            $self.add_error(&format!("'{}' ではないトークンです", $e.to_string()));
+            $self.add_error(&format!("{}: '{}' ではないトークンです", line!(), $e.to_string()));
         }
     };
 }
@@ -90,8 +91,8 @@ impl Parser {
         }
     }
 
-    fn add_error(&mut self, msg: &str) {
-        let token = &self.tokens[self.pos];
+    fn add_error_token(&mut self, msg: &str, pos: usize) {
+        let token = &self.tokens[pos];
         self.errors.push(ParseError {
             start_line: token.start_line,
             start_col: token.start_col,
@@ -101,15 +102,23 @@ impl Parser {
         });
     }
 
+    fn add_error(&mut self, msg: &str) {
+        self.add_error_token(msg, self.pos);
+    }
+
+    fn expect_ident(&mut self) -> Option<String> {
+        match self.tokens[self.pos].kind {
+            TokenKind::Ident(ref ident) => {
+                self.pos += 1;
+                Some(ident.clone())
+            },
+            _ => None,
+        }
+    }
+
     fn parse_term(&mut self) -> Expr {
-        let (is_ident, ident) = match self.tokens[self.pos].kind {
-            TokenKind::Ident(ref ident) => (true, ident.clone()),
-            _ => (false, String::new()),
-        };
-
-        if is_ident {
-            self.pos += 1;
-
+        let ident = self.expect_ident();
+        if let Some(ident) = ident {
             if self.consume(TokenKind::Lparen) {
                 // 関数呼び出し
                 let mut args = Vec::<Expr>::new();
@@ -128,15 +137,13 @@ impl Parser {
                 return Expr::Call(ident, args);
             } else {
                 // 変数
-                let offset = match self.variables.get(&ident) {
-                    Some(offset) => *offset,
+                return match self.variables.get(&ident) {
+                    Some(offset) => Expr::Ident(*offset),
                     None => {
-                        let offset = self.variables.len() * 8;
-                        self.variables.insert(ident.clone(), offset);
-                        offset
+                        self.add_error_token(&format!("変数 \"{}\" が見つかりません", ident), self.pos - 1);
+                        Expr::Invalid
                     },
                 };
-                return Expr::Ident(offset);
             }
         }
 
@@ -323,6 +330,26 @@ impl Parser {
                 }
 
                 Stmt::Block(stmt_list)
+            },
+            TokenKind::Int => {
+                self.pos += 1;
+
+                let ident = self.expect_ident();
+                let stmt = match ident {
+                    Some(ident) => {
+                        let offset = self.variables.len() * 8;
+                        self.variables.insert(ident, offset);
+                        Stmt::Define(offset)
+                    },
+                    None => {
+                        self.add_error("識別子ではありません");
+                        Stmt::Block(Vec::new())
+                    },
+                };
+
+                expect!(self, TokenKind::Semicolon);
+
+                stmt
             },
             _ => {
                 let stmt = Stmt::Expr(self.parse_expr());

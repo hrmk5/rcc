@@ -167,7 +167,7 @@ impl Generator {
                 for stmt in stmt_list {
                     self.gen_stmt(stmt);
                     match stmt {
-                        Stmt::Return(_) => {},
+                        Stmt::Return(_) | Stmt::Define(_) => {},
                         _ => self.code.push_str("  pop rax\n"),
                     };
                 }

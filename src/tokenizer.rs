@@ -25,6 +25,7 @@ pub enum TokenKind {
     While,
     For,
     Comma,
+    Int,
 }
 
 impl ToString for TokenKind {
@@ -55,6 +56,7 @@ impl ToString for TokenKind {
             TokenKind::While => "while",
             TokenKind::For => "for",
             TokenKind::Comma => ",",
+            TokenKind::Int => "int",
         })
     }
 }
@@ -181,6 +183,7 @@ impl Tokenizer {
             "else" => TokenKind::Else,
             "while" => TokenKind::While,
             "for" => TokenKind::For,
+            "int" => TokenKind::Int,
             _ => TokenKind::Ident(s),
         }, start_col, self.col);
     }
