@@ -1,6 +1,12 @@
 use crate::tokenizer::{Token, TokenKind};
 use std::collections::HashMap;
 
+#[derive(Debug, Clone)]
+pub enum Type {
+    Int,
+    Pointer(Box<Type>),
+}
+
 #[derive(Debug)]
 pub enum Infix {
     Add,
@@ -18,10 +24,27 @@ pub enum Literal {
     Number(i32),
 }
 
+#[derive(Debug, Clone)]
+pub struct Variable {
+    pub ty: Type,
+    pub offset: usize,
+}
+
+impl Variable {
+    pub fn new(ty: Type, offset: usize) -> Self {
+        Self {
+            ty,
+            offset,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Expr {
     Literal(Literal),
-    Ident(usize),
+    Variable(Variable),
+    Dereference(Variable),
+    Address(Variable),
     Assign(Box<Expr>, Box<Expr>),
     Infix(Infix, Box<Expr>,  Box<Expr>),
     Call(String, Vec<Expr>),
@@ -36,12 +59,12 @@ pub enum Stmt {
     While(Expr, Box<Stmt>),
     For(Option<Expr>, Option<Expr>, Option<Expr>, Box<Stmt>),
     Block(Vec<Stmt>),
-    Define(usize),
+    Define(Type, usize),
 }
 
 #[derive(Debug)]
 pub enum Declaration {
-    Func(String, Vec<String>, HashMap<String, usize>, Stmt),
+    Func(String, usize, usize, Stmt), // 関数名, 引数の数, スタックのサイズ, 処理
 }
 
 #[derive(Debug)]
@@ -59,7 +82,7 @@ pub struct ParseError {
 #[derive(Debug)]
 pub struct Parser {
     pub errors: Vec<ParseError>,
-    variables: HashMap<String, usize>,
+    variables: HashMap<String, Variable>,
     tokens: Vec<Token>,
     pos: usize,
 }
@@ -116,6 +139,25 @@ impl Parser {
         }
     }
 
+    fn parse_pointer(&mut self, ty: Type) -> Type {
+        if self.consume(TokenKind::Asterisk) {
+            self.parse_pointer(Type::Pointer(Box::new(ty)))
+        } else {
+            ty
+        }
+    }
+
+    fn expect_type(&mut self) -> Option<Type> {
+        let ty = match self.tokens[self.pos].kind {
+            TokenKind::Int => Type::Int,
+            _ => return None,
+        };
+
+        self.pos += 1;
+
+        Some(self.parse_pointer(ty))
+    }
+
     fn parse_term(&mut self) -> Expr {
         let ident = self.expect_ident();
         if let Some(ident) = ident {
@@ -138,7 +180,7 @@ impl Parser {
             } else {
                 // 変数
                 return match self.variables.get(&ident) {
-                    Some(offset) => Expr::Ident(*offset),
+                    Some(variable) => Expr::Variable(variable.clone()),
                     None => {
                         self.add_error_token(&format!("変数 \"{}\" が見つかりません", ident), self.pos - 1);
                         Expr::Invalid
@@ -159,6 +201,38 @@ impl Parser {
             TokenKind::Number(num) => {
                 self.pos += 1;
                 Expr::Literal(Literal::Number(num))
+            },
+            TokenKind::Asterisk => {
+                self.pos += 1;
+                let ident = self.expect_ident();
+                if let Some(ident) = ident {
+                    match self.variables.get(&ident) {
+                        Some(variable) => Expr::Dereference(variable.clone()),
+                        None => {
+                            self.add_error_token(&format!("変数 \"{}\" が見つかりません", ident), self.pos - 1);
+                            Expr::Invalid
+                        },
+                    }
+                } else {
+                    self.add_error("変数ではありません");
+                    Expr::Invalid
+                }
+            },
+            TokenKind::Ampersand => {
+                self.pos += 1;
+                let ident = self.expect_ident();
+                if let Some(ident) = ident {
+                    match self.variables.get(&ident) {
+                        Some(variable) => Expr::Address(variable.clone()),
+                        None => {
+                            self.add_error_token(&format!("変数 \"{}\" が見つかりません", ident), self.pos - 1);
+                            Expr::Invalid
+                        },
+                    }
+                } else {
+                    self.add_error("変数ではありません");
+                    Expr::Invalid
+                }
             },
             _ => {
                 self.add_error("数値でも開きカッコでもないトークンです");
@@ -187,7 +261,7 @@ impl Parser {
         let mut expr = self.parse_unary();
 
         loop {
-            if self.consume(TokenKind::Mul) {
+            if self.consume(TokenKind::Asterisk) {
                 expr = Expr::Infix(Infix::Mul, Box::new(expr), Box::new(self.parse_unary()));
             } else if self.consume(TokenKind::Div) {
                 expr = Expr::Infix(Infix::Div, Box::new(expr), Box::new(self.parse_unary()));
@@ -257,6 +331,26 @@ impl Parser {
     }
 
     fn parse_stmt(&mut self) -> Stmt {
+        let ty = self.expect_type();
+        if let Some(ty) = ty {
+            let ident = self.expect_ident();
+            let stmt = match ident {
+                Some(ident) => {
+                    let offset = self.variables.len() * 8;
+                    self.variables.insert(ident, Variable::new(ty.clone(), offset));
+                    Stmt::Define(ty, offset)
+                },
+                None => {
+                    self.add_error("識別子ではありません");
+                    Stmt::Block(Vec::new())
+                },
+            };
+
+            expect!(self, TokenKind::Semicolon);
+
+            return stmt;
+        }
+
         let stmt = match self.tokens[self.pos].kind {
             TokenKind::Return => {
                 self.pos += 1;
@@ -331,26 +425,6 @@ impl Parser {
 
                 Stmt::Block(stmt_list)
             },
-            TokenKind::Int => {
-                self.pos += 1;
-
-                let ident = self.expect_ident();
-                let stmt = match ident {
-                    Some(ident) => {
-                        let offset = self.variables.len() * 8;
-                        self.variables.insert(ident, offset);
-                        Stmt::Define(offset)
-                    },
-                    None => {
-                        self.add_error("識別子ではありません");
-                        Stmt::Block(Vec::new())
-                    },
-                };
-
-                expect!(self, TokenKind::Semicolon);
-
-                stmt
-            },
             _ => {
                 let stmt = Stmt::Expr(self.parse_expr());
                 expect!(self, TokenKind::Semicolon);
@@ -372,15 +446,13 @@ impl Parser {
                         expect!(self, TokenKind::Lparen);
 
                         // 引数
-                        let mut variables = HashMap::<String, usize>::new();
-                        let mut args = Vec::new();
+                        let mut variables = HashMap::<String, Variable>::new();
                         loop {
-                            if let TokenKind::Int = self.tokens[self.pos].kind {
-                                self.pos += 1;
+                            let ty = self.expect_type();
+                            if let Some(ty) = ty {
                                 if let TokenKind::Ident(ref ident) = self.tokens[self.pos].kind {
                                     self.pos += 1;
-                                    variables.insert(ident.clone(), variables.len() * 8);
-                                    args.push(ident.clone());
+                                    variables.insert(ident.clone(), Variable::new(ty, variables.len() * 8));
                                 } else {
                                     self.pos += 1;
                                     self.add_error("引数の名前がありません");
@@ -395,6 +467,7 @@ impl Parser {
                             }
                         }
 
+                        let arg_count = variables.len();
                         self.variables = variables;
 
                         let stmt = self.parse_stmt();
@@ -403,7 +476,7 @@ impl Parser {
                             _ => self.add_error("ブロックではありません"),
                         };
 
-                        Some(Declaration::Func(ident, args, self.variables.clone(), stmt))
+                        Some(Declaration::Func(ident, arg_count, self.variables.len(), stmt))
                     },
                     None => {
                         self.add_error("識別子ではありません");

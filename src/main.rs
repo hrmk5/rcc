@@ -44,8 +44,9 @@ fn main() {
     tokenizer.tokenize();
     if tokenizer.errors.len() > 0 {
         for error in tokenizer.errors {
-            println!("{}", input);
-            println!("{}^ {}", " ".repeat(error.pos), error.message);
+            let line = (error.line + 1).to_string();
+            println!("{} {}", format!("{} |", line).bright_cyan(), lines[error.line]);
+            println!("{}^ {}", " ".repeat(error.col + line.chars().count() + 3).bright_red(), error.message.bright_red());
         }
         process::exit(1);
     }
@@ -72,7 +73,7 @@ fn main() {
     }
 
     let mut generator = Generator::new();
-    generator.gen(&program);
+    generator.gen(program);
 
     if let ShowType::Code = show_type {
         println!("{}", generator.code);

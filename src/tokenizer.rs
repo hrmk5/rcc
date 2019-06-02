@@ -3,7 +3,7 @@ pub enum TokenKind {
     Number(i32),
     Add,
     Sub,
-    Mul,
+    Asterisk,
     Div,
     Lparen,
     Rparen,
@@ -26,6 +26,7 @@ pub enum TokenKind {
     For,
     Comma,
     Int,
+    Ampersand,
 }
 
 impl ToString for TokenKind {
@@ -34,7 +35,7 @@ impl ToString for TokenKind {
             TokenKind::Number(_) => "number",
             TokenKind::Add => "+",
             TokenKind::Sub => "-",
-            TokenKind::Mul => "*",
+            TokenKind::Asterisk => "*",
             TokenKind::Div => "/",
             TokenKind::Lparen => "(",
             TokenKind::Rparen => ")",
@@ -57,6 +58,7 @@ impl ToString for TokenKind {
             TokenKind::For => "for",
             TokenKind::Comma => ",",
             TokenKind::Int => "int",
+            TokenKind::Ampersand => "&",
         })
     }
 }
@@ -72,7 +74,8 @@ pub struct Token {
 
 #[derive(Debug)]
 pub struct TokenizeError {
-    pub pos: usize,
+    pub line: usize,
+    pub col: usize,
     pub message: String,
 }
 
@@ -111,7 +114,8 @@ impl Tokenizer {
 
     fn add_error(&mut self, msg: &str) {
         self.errors.push(TokenizeError {
-            pos: self.pos,
+            line: self.line,
+            col: self.col,
             message: String::from(msg),
         });
     }
@@ -197,7 +201,7 @@ impl Tokenizer {
                 c if c.is_ascii_alphanumeric() || c == '_' => self.tokenize_ident(),
                 '+' => self.add_token_and_skip(TokenKind::Add, 1),
                 '-' => self.add_token_and_skip(TokenKind::Sub, 1),
-                '*' => self.add_token_and_skip(TokenKind::Mul, 1),
+                '*' => self.add_token_and_skip(TokenKind::Asterisk, 1),
                 '/' => self.add_token_and_skip(TokenKind::Div, 1),
                 '(' => self.add_token_and_skip(TokenKind::Lparen, 1),
                 ')' => self.add_token_and_skip(TokenKind::Rparen, 1),
@@ -212,6 +216,7 @@ impl Tokenizer {
                 '>' => self.add_token_and_skip(TokenKind::GreaterThan, 1),
                 ';' => self.add_token_and_skip(TokenKind::Semicolon, 1),
                 ',' => self.add_token_and_skip(TokenKind::Comma, 1),
+                '&' => self.add_token_and_skip(TokenKind::Ampersand, 1),
                 '\0' => break,
                 _ => { self.add_error("Unexpected token"); self.next() },
             }
