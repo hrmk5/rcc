@@ -315,6 +315,7 @@ impl Parser {
                     if self.consume(TokenKind::Rbrace) {
                         break;
                     } else if self.consume(TokenKind::EOF) {
+                        self.pos -= 1;
                         self.add_error("'{' に対応する '}' がありません");
                         break;
                     }
