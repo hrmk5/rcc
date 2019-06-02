@@ -356,7 +356,8 @@ impl Parser {
                 if self.consume(TokenKind::Rparen) {
                     break;
                 } else if !self.consume(TokenKind::Comma) {
-                    self.add_error("',' ではないトークンです'");
+                    self.add_error("',' か ')' ではないトークンです");
+                    break;
                 }
             }
 
