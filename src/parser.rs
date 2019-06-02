@@ -311,7 +311,6 @@ impl Parser {
                 self.pos += 1;
                 let mut stmt_list = Vec::<Stmt>::new();
                 loop {
-                    stmt_list.push(self.parse_stmt());
                     if self.consume(TokenKind::Rbrace) {
                         break;
                     } else if self.consume(TokenKind::EOF) {
@@ -319,6 +318,8 @@ impl Parser {
                         self.add_error("'{' に対応する '}' がありません");
                         break;
                     }
+
+                    stmt_list.push(self.parse_stmt());
                 }
 
                 Stmt::Block(stmt_list)
