@@ -63,8 +63,17 @@ impl Generator {
                 self.code.push_str("  push rdi\n");
             },
             Expr::Infix(kind, lhs, rhs) => {
-                self.gen_expr(*lhs);
+                self.gen_expr(*lhs.clone());
                 self.gen_expr(*rhs);
+
+                if let Expr::Variable(variable) = *lhs {
+                    if let Type::Pointer(_) = variable.ty {
+                        self.code.push_str("  pop rdi\n");
+                        self.code.push_str("  mov rax, 8\n");
+                        self.code.push_str("  imul rdi\n");
+                        self.code.push_str("  push rax\n");
+                    }
+                }
 
                 self.code.push_str("  pop rdi\n");
                 self.code.push_str("  pop rax\n");

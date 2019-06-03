@@ -7,7 +7,7 @@ pub enum Type {
     Pointer(Box<Type>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Infix {
     Add,
     Sub,
@@ -19,7 +19,7 @@ pub enum Infix {
     NotEqual,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Literal {
     Number(i32),
 }
@@ -39,7 +39,7 @@ impl Variable {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Literal(Literal),
     Variable(Variable),
