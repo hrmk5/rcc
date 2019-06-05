@@ -7,6 +7,15 @@ pub enum Type {
     Pointer(Box<Type>),
 }
 
+impl Type {
+    pub fn get_size(&self) -> usize {
+        match self {
+            Type::Int => 8,
+            Type::Pointer(_) => 8,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Infix {
     Add,
@@ -158,6 +167,34 @@ impl Parser {
         Some(self.parse_pointer(ty))
     }
 
+    fn get_type(&mut self, expr: &Expr) -> Option<Type> {
+        match expr {
+            Expr::Literal(Literal::Number(_)) => Some(Type::Int),
+            Expr::Variable(variable) => Some(variable.ty.clone()),
+            Expr::Dereference(variable) => match variable.ty.clone() {
+                Type::Pointer(ty) => Some(*ty),
+                _ => {
+                    self.add_error("ポインタではない値を参照外ししています");
+                    None
+                },
+            },
+            Expr::Address(varaible) => Some(Type::Pointer(Box::new(varaible.ty.clone()))),
+            Expr::Assign(lhs, _) => self.get_type(lhs),
+            Expr::Infix(Infix::Add, lhs, rhs) | Expr::Infix(Infix::Sub, lhs, rhs) => {
+                let lty = self.get_type(lhs)?;
+                let rty = self.get_type(rhs)?;
+                match (lty.clone(), rty.clone()) {
+                    (Type::Pointer(_), _) => Some(lty),
+                    (_, Type::Pointer(_)) => Some(rty),
+                    _ => Some(Type::Int),
+                }
+            },
+            Expr::Infix(_, _, _) => Some(Type::Int),
+            Expr::Call(_, _) => Some(Type::Int), // TODO: 戻り値の型を返す
+            Expr::Invalid => None,
+        }
+    }
+
     fn parse_term(&mut self) -> Expr {
         let ident = self.expect_ident();
         if let Some(ident) = ident {
@@ -250,6 +287,18 @@ impl Parser {
             TokenKind::Sub => {
                 self.pos += 1;
                 Expr::Infix(Infix::Sub, Box::new(Expr::Literal(Literal::Number(0))), Box::new(self.parse_term()))
+            },
+            TokenKind::SizeOf => {
+                self.pos += 1;
+                let expr = self.parse_expr();
+                let ty = self.get_type(&expr);
+                match ty {
+                    Some(ty) => Expr::Literal(Literal::Number(ty.get_size() as i32)),
+                    None => {
+                        self.add_error("型を識別できませんでした");
+                        Expr::Invalid
+                    },
+                }
             },
             _ => {
                 self.parse_term()

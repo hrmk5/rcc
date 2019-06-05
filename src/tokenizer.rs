@@ -27,6 +27,7 @@ pub enum TokenKind {
     Comma,
     Int,
     Ampersand,
+    SizeOf,
 }
 
 impl ToString for TokenKind {
@@ -59,6 +60,7 @@ impl ToString for TokenKind {
             TokenKind::Comma => ",",
             TokenKind::Int => "int",
             TokenKind::Ampersand => "&",
+            TokenKind::SizeOf => "sizeof",
         })
     }
 }
@@ -188,6 +190,7 @@ impl Tokenizer {
             "while" => TokenKind::While,
             "for" => TokenKind::For,
             "int" => TokenKind::Int,
+            "sizeof" => TokenKind::SizeOf,
             _ => TokenKind::Ident(s),
         }, start_col, self.col);
     }
