@@ -91,7 +91,7 @@ impl Generator {
 
                 self.code.push_str("  push rax\n");
             },
-            Expr::Call(name, args) => {
+            Expr::Call(name, _, args) => {
                 let arg_count = args.len();
                 for arg_expr in args {
                     self.gen_expr(arg_expr);

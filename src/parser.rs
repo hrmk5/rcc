@@ -56,7 +56,7 @@ pub enum Expr {
     Address(Variable),
     Assign(Box<Expr>, Box<Expr>),
     Infix(Infix, Box<Expr>,  Box<Expr>),
-    Call(String, Vec<Expr>),
+    Call(String, Type, Vec<Expr>),
     Invalid,
 }
 
@@ -69,6 +69,21 @@ pub enum Stmt {
     For(Option<Expr>, Option<Expr>, Option<Expr>, Box<Stmt>),
     Block(Vec<Stmt>),
     Define(Type, usize),
+}
+
+#[derive(Debug)]
+pub struct Function {
+    return_type: Type,
+    args: Vec<Variable>,
+}
+
+impl Function {
+    pub fn new(return_type: Type, args: Vec<Variable>) -> Self {
+        Function {
+            return_type,
+            args,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -92,6 +107,7 @@ pub struct ParseError {
 pub struct Parser {
     pub errors: Vec<ParseError>,
     variables: HashMap<String, Variable>,
+    functions: HashMap<String, Function>,
     tokens: Vec<Token>,
     pos: usize,
 }
@@ -111,6 +127,7 @@ impl Parser {
             tokens,
             errors: Vec::new(),
             variables: HashMap::new(),
+            functions: HashMap::new(),
         }
     }
 
@@ -190,7 +207,7 @@ impl Parser {
                 }
             },
             Expr::Infix(_, _, _) => Some(Type::Int),
-            Expr::Call(_, _) => Some(Type::Int), // TODO: 戻り値の型を返す
+            Expr::Call(_, ty, _) => Some(ty.clone()),
             Expr::Invalid => None,
         }
     }
@@ -213,7 +230,14 @@ impl Parser {
                     expect!(self, TokenKind::Comma);
                 }
 
-                return Expr::Call(ident, args);
+                // TODO: 引数の型チェック
+                return match self.functions.get(&ident) {
+                    Some(func) => Expr::Call(ident, func.return_type.clone(), args),
+                    None => {
+                        self.add_error("関数が見つかりません");
+                        Expr::Invalid
+                    }
+                };
             } else {
                 // 変数
                 return match self.variables.get(&ident) {
@@ -517,6 +541,7 @@ impl Parser {
                         }
 
                         let arg_count = variables.len();
+                        self.functions.insert(ident.clone(), Function::new(Type::Int, variables.clone().into_iter().map(|(k, v)| v).collect()));
                         self.variables = variables;
 
                         let stmt = self.parse_stmt();
