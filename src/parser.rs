@@ -52,7 +52,7 @@ impl Variable {
 pub enum Expr {
     Literal(Literal),
     Variable(Variable),
-    Dereference(Variable),
+    Dereference(Box<Expr>),
     Address(Variable),
     Assign(Box<Expr>, Box<Expr>),
     Infix(Infix, Box<Expr>,  Box<Expr>),
@@ -190,10 +190,16 @@ impl Parser {
         match expr {
             Expr::Literal(Literal::Number(_)) => Some(Type::Int),
             Expr::Variable(variable) => Some(variable.ty.clone()),
-            Expr::Dereference(variable) => match variable.ty.clone() {
-                Type::Pointer(ty) => Some(*ty),
+            Expr::Dereference(box expr) => match expr {
+                Expr::Variable(variable) => match &variable.ty {
+                    Type::Pointer(box ty) => Some(ty.clone()),
+                    _ => {
+                        self.add_error("ポインタではない変数を参照外ししています");
+                        None
+                    }
+                },
                 _ => {
-                    self.add_error("ポインタではない値を参照外ししています");
+                    self.add_error("変数以外の式を参照外ししています");
                     None
                 },
             },
@@ -267,18 +273,13 @@ impl Parser {
             },
             TokenKind::Asterisk => {
                 self.pos += 1;
-                let ident = self.expect_ident();
-                if let Some(ident) = ident {
-                    match self.variables.get(&ident) {
-                        Some(variable) => Expr::Dereference(variable.clone()),
-                        None => {
-                            self.add_error_token(&format!("変数 \"{}\" が見つかりません", ident), self.pos - 1);
-                            Expr::Invalid
-                        },
+                let expr = self.parse_term();
+                match expr {
+                    Expr::Variable(_) | Expr::Dereference(_) => Expr::Dereference(Box::new(expr)),
+                    _ => {
+                        self.add_error("変数ではない式を参照外ししています");
+                        Expr::Invalid
                     }
-                } else {
-                    self.add_error("変数ではありません");
-                    Expr::Invalid
                 }
             },
             TokenKind::Ampersand => {

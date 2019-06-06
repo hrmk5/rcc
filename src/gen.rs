@@ -1,4 +1,4 @@
-use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration, Type, Variable};
+use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration, Type};
 
 pub struct Generator {
     pub code: String,
@@ -43,15 +43,25 @@ impl Generator {
 
     fn gen_lvalue(&mut self, expr: Expr) -> Option<usize> {
         match expr {
-            Expr::Dereference(variable) => {
-                if let Type::Pointer(_) = variable.ty {
-                    self.code.push_str(&format!("  mov rax, [rbp-{}]\n", variable.offset + 8));
-                    self.code.push_str("  push rax\n");
-                    Some(8)
-                } else {
-                    println!("ポインタではない変数です");
-                    None
-                }
+            Expr::Dereference(expr) => {
+                fn gen(expr: Expr, code: &mut String) {
+                    match expr {
+                        Expr::Dereference(expr) => {
+                            gen(*expr, code);
+                            code.push_str("  mov rax, [rax]\n");
+                        },
+                        Expr::Variable(variable) => {
+                            code.push_str(&format!("  mov rax, [rbp-{}]\n", variable.offset + 8))
+                        },
+                        _ => panic!("変数ではない式を参照外ししています"),
+                    };
+                };
+
+                let mut code = String::new();
+                gen(*expr, &mut code);
+                self.code.push_str(&code);
+                self.code.push_str("  push rax\n");
+                Some(8)
             },
             Expr::Variable(variable) => {
                 self.code.push_str("  mov rax, rbp\n");
@@ -71,24 +81,14 @@ impl Generator {
             Expr::Literal(Literal::Number(num)) => {
                 self.code.push_str(&format!("  push {}\n", num));
             },
-            Expr::Variable(ref variable) => {
-                let size_str = self.get_size_str(variable.ty.get_size()).unwrap();
-                let register = self.get_size_register(variable.ty.get_size(), "rax").unwrap();
-                self.gen_lvalue(expr);
-                self.code.push_str("  pop rax\n");
-                self.code.push_str(&format!("  mov {}, {} [rax]\n", register, size_str));
-                self.code.push_str("  push rax\n");
-            },
-            Expr::Dereference(ref variable) => {
-                if let Type::Pointer(ty) = &variable.ty {
-                    let size_str = self.get_size_str(ty.get_size()).unwrap();
-                    let register = self.get_size_register(ty.get_size(), "rax").unwrap();
-                    self.gen_lvalue(expr);
+            Expr::Variable(_) | Expr::Dereference(_) => {
+                let size = self.gen_lvalue(expr);
+                if let Some(size) = size {
+                    let size_str = self.get_size_str(size).unwrap();
+                    let register = self.get_size_register(size, "rax").unwrap();
                     self.code.push_str("  pop rax\n");
                     self.code.push_str(&format!("  mov {}, {} [rax]\n", register, size_str));
                     self.code.push_str("  push rax\n");
-                } else {
-                    println!("ポインタではない変数です");
                 }
             },
             Expr::Address(variable) => {
