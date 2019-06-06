@@ -10,7 +10,7 @@ pub enum Type {
 impl Type {
     pub fn get_size(&self) -> usize {
         match self {
-            Type::Int => 8,
+            Type::Int => 4,
             Type::Pointer(_) => 8,
         }
     }
@@ -88,7 +88,7 @@ impl Function {
 
 #[derive(Debug)]
 pub enum Declaration {
-    Func(String, usize, usize, Stmt), // 関数名, 引数の数, スタックのサイズ, 処理
+    Func(String, Vec<Variable>, usize, Stmt), // 関数名, 引数の数, スタックのサイズ, 処理
 }
 
 #[derive(Debug)]
@@ -110,6 +110,7 @@ pub struct Parser {
     functions: HashMap<String, Function>,
     tokens: Vec<Token>,
     pos: usize,
+    stack_size: usize,
 }
 
 macro_rules! expect {
@@ -128,6 +129,7 @@ impl Parser {
             errors: Vec::new(),
             variables: HashMap::new(),
             functions: HashMap::new(),
+            stack_size: 0,
         }
     }
 
@@ -409,8 +411,8 @@ impl Parser {
             let ident = self.expect_ident();
             let stmt = match ident {
                 Some(ident) => {
-                    let offset = self.variables.len() * 8;
-                    self.variables.insert(ident, Variable::new(ty.clone(), offset));
+                    let offset = self.stack_size;
+                    self.variables.insert(ident, Variable::new(ty.clone(), self.variables.len() * 8));
                     Stmt::Define(ty, offset)
                 },
                 None => {
@@ -540,8 +542,10 @@ impl Parser {
                             }
                         }
 
-                        let arg_count = variables.len();
-                        self.functions.insert(ident.clone(), Function::new(Type::Int, variables.clone().into_iter().map(|(k, v)| v).collect()));
+                        let mut args: Vec<Variable> = variables.clone().into_iter().map(|(_, v)| v).collect();
+                        args.sort_by_key(|v| v.offset);
+
+                        self.functions.insert(ident.clone(), Function::new(Type::Int, variables.clone().into_iter().map(|(_, v)| v).collect()));
                         self.variables = variables;
 
                         let stmt = self.parse_stmt();
@@ -550,7 +554,7 @@ impl Parser {
                             _ => self.add_error("ブロックではありません"),
                         };
 
-                        Some(Declaration::Func(ident, arg_count, self.variables.len(), stmt))
+                        Some(Declaration::Func(ident, args, self.variables.len() * 8, stmt))
                     },
                     None => {
                         self.add_error("識別子ではありません");
