@@ -311,33 +311,6 @@ impl Parser {
                 self.pos += 1;
                 Expr::Literal(Literal::Number(num))
             },
-            TokenKind::Asterisk => {
-                self.pos += 1;
-                let expr = self.parse_term();
-                match expr.get_type() {
-                    Some(Type::Pointer(_)) => Expr::Dereference(Box::new(expr)),
-                    _ => {
-                        self.add_error("ポインタではない値を参照外しすることはできません");
-                        Expr::Invalid
-                    }
-                }
-            },
-            TokenKind::Ampersand => {
-                self.pos += 1;
-                let ident = self.expect_ident();
-                if let Some(ident) = ident {
-                    match self.variables.get(&ident) {
-                        Some(variable) => Expr::Address(variable.clone()),
-                        None => {
-                            self.add_error_token(&format!("変数 \"{}\" が見つかりません", ident), self.pos - 1);
-                            Expr::Invalid
-                        },
-                    }
-                } else {
-                    self.add_error("変数ではありません");
-                    Expr::Invalid
-                }
-            },
             _ => {
                 self.add_error("数値でも開きカッコでもないトークンです");
                 Expr::Invalid
@@ -365,6 +338,33 @@ impl Parser {
                         self.add_error("型を識別できませんでした");
                         Expr::Invalid
                     },
+                }
+            },
+            TokenKind::Asterisk => {
+                self.pos += 1;
+                let expr = self.parse_unary();
+                match expr.get_type() {
+                    Some(Type::Pointer(_)) => Expr::Dereference(Box::new(expr)),
+                    _ => {
+                        self.add_error("ポインタではない値を参照外しすることはできません");
+                        Expr::Invalid
+                    }
+                }
+            },
+            TokenKind::Ampersand => {
+                self.pos += 1;
+                let ident = self.expect_ident();
+                if let Some(ident) = ident {
+                    match self.variables.get(&ident) {
+                        Some(variable) => Expr::Address(variable.clone()),
+                        None => {
+                            self.add_error_token(&format!("変数 \"{}\" が見つかりません", ident), self.pos - 1);
+                            Expr::Invalid
+                        },
+                    }
+                } else {
+                    self.add_error("変数ではありません");
+                    Expr::Invalid
                 }
             },
             _ => {
