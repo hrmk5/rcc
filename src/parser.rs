@@ -1,10 +1,12 @@
 use crate::tokenizer::{Token, TokenKind};
 use std::collections::HashMap;
+use std::convert::TryInto;
 
 #[derive(Debug, Clone)]
 pub enum Type {
     Int,
     Pointer(Box<Type>),
+    Array(Box<Type>, usize),
 }
 
 impl Type {
@@ -12,6 +14,7 @@ impl Type {
         match self {
             Type::Int => 4,
             Type::Pointer(_) => 8,
+            Type::Array(_, _) => 8,
         }
     }
 }
@@ -165,6 +168,47 @@ impl Parser {
             },
             _ => None,
         }
+    }
+
+    fn expect_define(&mut self) -> Option<Variable> {
+        let ty = self.expect_type()?;
+        let ident = self.expect_ident();
+        match ident {
+            Some(ident) => {
+                let mut ty = ty;
+                if self.consume(TokenKind::Lbracket) {
+                    match self.tokens[self.pos].kind {
+                        TokenKind::Number(num) => match num.try_into() {
+                            Ok(num) => ty = Type::Array(Box::new(ty), num),
+                            _ => self.add_error("大きすぎる値です"),
+                        },
+                        TokenKind::Sub => {
+                            self.add_error("負の値です");
+                            self.pos += 1;
+                        },
+                        _ => self.add_error("数値ではありません"),
+                    }
+                    self.pos += 1;
+                    expect!(self, TokenKind::Rbracket);
+                }
+
+                let offset = self.stack_size;
+                self.define_variable(&ident, &ty);
+                Some(Variable::new(ty, offset))
+            },
+            None => {
+                self.add_error("識別子ではありません");
+                None
+            },
+        }
+    }
+
+    fn define_variable(&mut self, ident: &str, ty: &Type) {
+        self.variables.insert(ident.to_string(), Variable::new(ty.clone(), self.stack_size));
+        self.stack_size += match ty {
+            Type::Array(_, size) => 8 * size,
+            _ => 8,
+        };
     }
 
     fn parse_pointer(&mut self, ty: Type) -> Type {
@@ -407,24 +451,11 @@ impl Parser {
     }
 
     fn parse_stmt(&mut self) -> Stmt {
-        let ty = self.expect_type();
-        if let Some(ty) = ty {
-            let ident = self.expect_ident();
-            let stmt = match ident {
-                Some(ident) => {
-                    let offset = self.stack_size;
-                    self.variables.insert(ident, Variable::new(ty.clone(), self.variables.len() * 8));
-                    Stmt::Define(ty, offset)
-                },
-                None => {
-                    self.add_error("識別子ではありません");
-                    Stmt::Block(Vec::new())
-                },
-            };
-
+        // 変数定義
+        let variable = self.expect_define();
+        if let Some(variable) = variable {
             expect!(self, TokenKind::Semicolon);
-
-            return stmt;
+            return Stmt::Define(variable.ty, variable.offset);
         }
 
         let stmt = match self.tokens[self.pos].kind {
@@ -522,18 +553,9 @@ impl Parser {
                         expect!(self, TokenKind::Lparen);
 
                         // 引数
-                        let mut variables = HashMap::<String, Variable>::new();
+                        self.variables = HashMap::<String, Variable>::new();
                         loop {
-                            let ty = self.expect_type();
-                            if let Some(ty) = ty {
-                                if let TokenKind::Ident(ref ident) = self.tokens[self.pos].kind {
-                                    self.pos += 1;
-                                    variables.insert(ident.clone(), Variable::new(ty, variables.len() * 8));
-                                } else {
-                                    self.pos += 1;
-                                    self.add_error("引数の名前がありません");
-                                }
-                            }
+                            let _ = self.expect_define();
 
                             if self.consume(TokenKind::Rparen) {
                                 break;
@@ -543,11 +565,10 @@ impl Parser {
                             }
                         }
 
-                        let mut args: Vec<Variable> = variables.clone().into_iter().map(|(_, v)| v).collect();
+                        let mut args: Vec<Variable> = self.variables.clone().into_iter().map(|(_, v)| v).collect();
                         args.sort_by_key(|v| v.offset);
 
-                        self.functions.insert(ident.clone(), Function::new(Type::Int, variables.clone().into_iter().map(|(_, v)| v).collect()));
-                        self.variables = variables;
+                        self.functions.insert(ident.clone(), Function::new(Type::Int, self.variables.clone().into_iter().map(|(_, v)| v).collect()));
 
                         let stmt = self.parse_stmt();
                         match stmt {
@@ -555,7 +576,7 @@ impl Parser {
                             _ => self.add_error("ブロックではありません"),
                         };
 
-                        Some(Declaration::Func(ident, args, self.variables.len() * 8, stmt))
+                        Some(Declaration::Func(ident, args, self.stack_size, stmt))
                     },
                     None => {
                         self.add_error("識別子ではありません");

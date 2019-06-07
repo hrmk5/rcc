@@ -28,6 +28,8 @@ pub enum TokenKind {
     Int,
     Ampersand,
     SizeOf,
+    Lbracket,
+    Rbracket,
 }
 
 impl ToString for TokenKind {
@@ -61,6 +63,8 @@ impl ToString for TokenKind {
             TokenKind::Int => "int",
             TokenKind::Ampersand => "&",
             TokenKind::SizeOf => "sizeof",
+            TokenKind::Lbracket => "[",
+            TokenKind::Rbracket => "]",
         })
     }
 }
@@ -210,6 +214,8 @@ impl Tokenizer {
                 ')' => self.add_token_and_skip(TokenKind::Rparen, 1),
                 '{' => self.add_token_and_skip(TokenKind::Lbrace, 1),
                 '}' => self.add_token_and_skip(TokenKind::Rbrace, 1),
+                '[' => self.add_token_and_skip(TokenKind::Lbracket, 1),
+                ']' => self.add_token_and_skip(TokenKind::Rbracket, 1),
                 '=' if self.next_is('=') => self.add_token_and_skip(TokenKind::Equal, 2),
                 '=' => self.add_token_and_skip(TokenKind::Assign, 1),
                 '!' if self.next_is('=') => self.add_token_and_skip(TokenKind::NotEqual, 2),
