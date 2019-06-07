@@ -59,23 +59,26 @@ impl Generator {
         }
     }
 
+    fn gen_dereference(&mut self, expr: Expr) {
+        match expr {
+            Expr::Dereference(expr) => {
+                self.gen_dereference(*expr);
+                add_mnemonic!(self, "mov rax, [rax]");
+            },
+            Expr::Variable(variable) => {
+                add_mnemonic!(self, "mov rax, [rbp-{}]", variable.offset + 8);
+            },
+            _ => {
+                self.gen_expr(expr);
+                add_mnemonic!(self, "pop rax");
+            },
+        }
+    }
+
     fn gen_lvalue(&mut self, expr: Expr) -> Option<usize> {
         match expr {
             Expr::Dereference(expr) => {
-                fn gen(expr: Expr, code: &mut String) {
-                    match expr {
-                        Expr::Dereference(expr) => {
-                            gen(*expr, code);
-                            code.push_str("  mov rax, [rax]\n");
-                        },
-                        Expr::Variable(variable) => {
-                            code.push_str(&format!("  mov rax, [rbp-{}]\n", variable.offset + 8))
-                        },
-                        _ => panic!("変数ではない式を参照外ししています"),
-                    };
-                };
-
-                gen(*expr, &mut self.code);
+                self.gen_dereference(*expr);
                 add_mnemonic!(self, "push rax");
                 Some(8)
             },

@@ -314,10 +314,10 @@ impl Parser {
             TokenKind::Asterisk => {
                 self.pos += 1;
                 let expr = self.parse_term();
-                match expr {
-                    Expr::Variable(_) | Expr::Dereference(_) => Expr::Dereference(Box::new(expr)),
+                match expr.get_type() {
+                    Some(Type::Pointer(_)) => Expr::Dereference(Box::new(expr)),
                     _ => {
-                        self.add_error("変数ではない式を参照外ししています");
+                        self.add_error("ポインタではない値を参照外しすることはできません");
                         Expr::Invalid
                     }
                 }
