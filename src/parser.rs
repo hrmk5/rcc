@@ -63,6 +63,36 @@ pub enum Expr {
     Invalid,
 }
 
+impl Expr {
+    pub fn get_type(&self) -> Option<Type> {
+        match self {
+            Expr::Literal(Literal::Number(_)) => Some(Type::Int),
+            Expr::Variable(variable) => Some(variable.ty.clone()),
+            Expr::Dereference(box expr) => match expr {
+                Expr::Variable(variable) => match &variable.ty {
+                    Type::Pointer(box ty) => Some(ty.clone()),
+                    _ => panic!("ポインタではない変数を参照外ししています"),
+                },
+                _ => panic!("変数以外の式を参照外ししています"),
+            },
+            Expr::Address(varaible) => Some(Type::Pointer(Box::new(varaible.ty.clone()))),
+            Expr::Assign(lhs, _) => lhs.get_type(),
+            Expr::Infix(Infix::Add, lhs, rhs) | Expr::Infix(Infix::Sub, lhs, rhs) => {
+                let lty = lhs.get_type()?;
+                let rty = rhs.get_type()?;
+                match (lty.clone(), rty.clone()) {
+                    (Type::Pointer(_), _) => Some(lty),
+                    (_, Type::Pointer(_)) => Some(rty),
+                    _ => Some(Type::Int),
+                }
+            },
+            Expr::Infix(_, _, _) => Some(Type::Int),
+            Expr::Call(_, ty, _) => Some(ty.clone()),
+            Expr::Invalid => None,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Stmt {
     Expr(Expr),
@@ -230,40 +260,6 @@ impl Parser {
         Some(self.parse_pointer(ty))
     }
 
-    fn get_type(&mut self, expr: &Expr) -> Option<Type> {
-        match expr {
-            Expr::Literal(Literal::Number(_)) => Some(Type::Int),
-            Expr::Variable(variable) => Some(variable.ty.clone()),
-            Expr::Dereference(box expr) => match expr {
-                Expr::Variable(variable) => match &variable.ty {
-                    Type::Pointer(box ty) => Some(ty.clone()),
-                    _ => {
-                        self.add_error("ポインタではない変数を参照外ししています");
-                        None
-                    }
-                },
-                _ => {
-                    self.add_error("変数以外の式を参照外ししています");
-                    None
-                },
-            },
-            Expr::Address(varaible) => Some(Type::Pointer(Box::new(varaible.ty.clone()))),
-            Expr::Assign(lhs, _) => self.get_type(lhs),
-            Expr::Infix(Infix::Add, lhs, rhs) | Expr::Infix(Infix::Sub, lhs, rhs) => {
-                let lty = self.get_type(lhs)?;
-                let rty = self.get_type(rhs)?;
-                match (lty.clone(), rty.clone()) {
-                    (Type::Pointer(_), _) => Some(lty),
-                    (_, Type::Pointer(_)) => Some(rty),
-                    _ => Some(Type::Int),
-                }
-            },
-            Expr::Infix(_, _, _) => Some(Type::Int),
-            Expr::Call(_, ty, _) => Some(ty.clone()),
-            Expr::Invalid => None,
-        }
-    }
-
     fn parse_term(&mut self) -> Expr {
         let ident = self.expect_ident();
         if let Some(ident) = ident {
@@ -362,7 +358,7 @@ impl Parser {
             TokenKind::SizeOf => {
                 self.pos += 1;
                 let expr = self.parse_expr();
-                let ty = self.get_type(&expr);
+                let ty = expr.get_type();
                 match ty {
                     Some(ty) => Expr::Literal(Literal::Number(ty.get_size() as i32)),
                     None => {
@@ -551,6 +547,8 @@ impl Parser {
                 match ident {
                     Some(ident) => {
                         expect!(self, TokenKind::Lparen);
+
+                        self.stack_size = 0;
 
                         // 引数
                         self.variables = HashMap::<String, Variable>::new();

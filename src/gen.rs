@@ -124,17 +124,31 @@ impl Generator {
                 }
             },
             Expr::Infix(kind, lhs, rhs) => {
-                self.gen_expr(*lhs.clone());
-                self.gen_expr(*rhs);
-
-                if let Expr::Variable(variable) = *lhs {
-                    if let Type::Pointer(_) = variable.ty {
+                match (kind.clone(), lhs.get_type(), rhs.get_type()) {
+                    (Infix::Add, Some(Type::Pointer(_)), Some(Type::Int)) | (Infix::Sub, Some(Type::Pointer(_)), Some(Type::Int)) => {
+                        self.gen_expr(*lhs);
+                        self.gen_expr(*rhs);
+                        // rhs を8倍にする
                         add_mnemonic!(self, "pop rdi");
                         add_mnemonic!(self, "mov rax, 8");
                         add_mnemonic!(self, "imul rdi");
                         add_mnemonic!(self, "push rax");
+                    },
+                    (Infix::Add, Some(Type::Int), Some(Type::Pointer(_))) | (Infix::Sub, Some(Type::Int), Some(Type::Pointer(_))) => {
+                        self.gen_expr(*lhs);
+                        // lhs を8倍にする
+                        add_mnemonic!(self, "pop rdi");
+                        add_mnemonic!(self, "mov rax, 8");
+                        add_mnemonic!(self, "imul rdi");
+                        add_mnemonic!(self, "push rax");
+
+                        self.gen_expr(*rhs);
+                    },
+                    _ => {
+                        self.gen_expr(*lhs);
+                        self.gen_expr(*rhs);
                     }
-                }
+                };
 
                 add_mnemonic!(self, "pop rdi");
                 add_mnemonic!(self, "pop rax");
