@@ -68,12 +68,10 @@ impl Expr {
         match self {
             Expr::Literal(Literal::Number(_)) => Some(Type::Int),
             Expr::Variable(variable) => Some(variable.ty.clone()),
-            Expr::Dereference(box expr) => match expr {
-                Expr::Variable(variable) => match &variable.ty {
-                    Type::Pointer(box ty) => Some(ty.clone()),
-                    _ => panic!("ポインタではない変数を参照外ししています"),
-                },
-                _ => panic!("変数以外の式を参照外ししています"),
+            Expr::Dereference(expr) => match expr.get_type() {
+                Some(Type::Pointer(box ty)) => Some(ty.clone()),
+                Some(Type::Array(box ty, _)) => Some(ty.clone()),
+                _ => panic!("ポインタではない式を参照外ししています"),
             },
             Expr::Address(varaible) => Some(Type::Pointer(Box::new(varaible.ty.clone()))),
             Expr::Assign(lhs, _) => lhs.get_type(),
@@ -81,8 +79,8 @@ impl Expr {
                 let lty = lhs.get_type()?;
                 let rty = rhs.get_type()?;
                 match (lty.clone(), rty.clone()) {
-                    (Type::Pointer(_), _) => Some(lty),
-                    (_, Type::Pointer(_)) => Some(rty),
+                    (Type::Pointer(ty), _) | (_, Type::Pointer(ty)) => Some(Type::Pointer(Box::new(*ty))),
+                    (Type::Array(ty, _), _) | (_, Type::Array(ty, _)) => Some(Type::Pointer(Box::new(*ty))),
                     _ => Some(Type::Int),
                 }
             },
@@ -234,10 +232,15 @@ impl Parser {
     }
 
     fn define_variable(&mut self, ident: &str, ty: &Type) {
-        self.variables.insert(ident.to_string(), Variable::new(ty.clone(), self.stack_size));
-        self.stack_size += match ty {
-            Type::Array(_, size) => 8 * size,
-            _ => 8,
+        match ty {
+            Type::Array(_, size) => {
+                self.variables.insert(ident.to_string(), Variable::new(ty.clone(), self.stack_size + 8 * (size - 1)));
+                self.stack_size += 8 * size;
+            },
+            _ => {
+                self.variables.insert(ident.to_string(), Variable::new(ty.clone(), self.stack_size));
+                self.stack_size += 8;
+            }
         };
     }
 
@@ -318,15 +321,28 @@ impl Parser {
         }
     }
 
+    fn parse_postfix(&mut self) -> Expr {
+        let expr = self.parse_term();
+        if self.consume(TokenKind::Lbracket) {
+            // 配列の添字
+            let index = self.parse_expr();
+            let expr = Expr::Dereference(Box::new(Expr::Infix(Infix::Add, Box::new(expr), Box::new(index))));
+            expect!(self, TokenKind::Rbracket);
+            expr
+        } else {
+            expr
+        }
+    }
+
     fn parse_unary(&mut self) -> Expr {
         match self.tokens[self.pos].kind {
             TokenKind::Add => {
                 self.pos += 1;
-                self.parse_term()
+                self.parse_postfix()
             },
             TokenKind::Sub => {
                 self.pos += 1;
-                Expr::Infix(Infix::Sub, Box::new(Expr::Literal(Literal::Number(0))), Box::new(self.parse_term()))
+                Expr::Infix(Infix::Sub, Box::new(Expr::Literal(Literal::Number(0))), Box::new(self.parse_postfix()))
             },
             TokenKind::SizeOf => {
                 self.pos += 1;
@@ -368,7 +384,7 @@ impl Parser {
                 }
             },
             _ => {
-                self.parse_term()
+                self.parse_postfix()
             }
         }
     }

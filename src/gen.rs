@@ -1,4 +1,4 @@
-use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration, Type};
+use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration, Type, Variable};
 
 pub struct Generator {
     pub code: String,
@@ -101,13 +101,19 @@ impl Generator {
                 add_mnemonic!(self, "push {}", num);
             },
             Expr::Variable(_) | Expr::Dereference(_) => {
-                let size = self.gen_lvalue(expr);
+                let size = self.gen_lvalue(expr.clone());
                 if let Some(size) = size {
                     let size_str = self.get_size_str(size).unwrap();
                     let register = self.get_size_register(size, "rax").unwrap();
-                    add_mnemonic!(self, "pop rax");
-                    add_mnemonic!(self, "mov {}, {} [rax]", register, size_str);
-                    add_mnemonic!(self, "push rax");
+
+                    match expr {
+                        Expr::Variable(Variable { ty: Type::Array(_, _), .. }) => {},
+                        _ => {
+                            add_mnemonic!(self, "pop rax");
+                            add_mnemonic!(self, "mov {}, {} [rax]", register, size_str);
+                            add_mnemonic!(self, "push rax");
+                        },
+                    };
                 }
             },
             Expr::Address(variable) => {
@@ -127,30 +133,36 @@ impl Generator {
                 }
             },
             Expr::Infix(kind, lhs, rhs) => {
-                match (kind.clone(), lhs.get_type(), rhs.get_type()) {
-                    (Infix::Add, Some(Type::Pointer(_)), Some(Type::Int)) | (Infix::Sub, Some(Type::Pointer(_)), Some(Type::Int)) => {
-                        self.gen_expr(*lhs);
-                        self.gen_expr(*rhs);
-                        // rhs を8倍にする
-                        add_mnemonic!(self, "pop rdi");
-                        add_mnemonic!(self, "mov rax, 8");
-                        add_mnemonic!(self, "imul rdi");
-                        add_mnemonic!(self, "push rax");
-                    },
-                    (Infix::Add, Some(Type::Int), Some(Type::Pointer(_))) | (Infix::Sub, Some(Type::Int), Some(Type::Pointer(_))) => {
-                        self.gen_expr(*lhs);
-                        // lhs を8倍にする
-                        add_mnemonic!(self, "pop rdi");
-                        add_mnemonic!(self, "mov rax, 8");
-                        add_mnemonic!(self, "imul rdi");
-                        add_mnemonic!(self, "push rax");
+                match kind.clone() {
+                    Infix::Add | Infix::Sub => match (lhs.get_type(), rhs.get_type()) {
+                        (Some(Type::Pointer(_)), Some(Type::Int)) | (Some(Type::Array(_, _)), Some(Type::Int)) => {
+                            self.gen_expr(*lhs);
+                            self.gen_expr(*rhs);
+                            // rhs を8倍にする
+                            add_mnemonic!(self, "pop rdi");
+                            add_mnemonic!(self, "mov rax, 8");
+                            add_mnemonic!(self, "imul rdi");
+                            add_mnemonic!(self, "push rax");
+                        },
+                        (Some(Type::Int), Some(Type::Pointer(_))) | (Some(Type::Int), Some(Type::Array(_, _))) => {
+                            self.gen_expr(*lhs);
+                            // lhs を8倍にする
+                            add_mnemonic!(self, "pop rdi");
+                            add_mnemonic!(self, "mov rax, 8");
+                            add_mnemonic!(self, "imul rdi");
+                            add_mnemonic!(self, "push rax");
 
-                        self.gen_expr(*rhs);
+                            self.gen_expr(*rhs);
+                        },
+                        _ => {
+                            self.gen_expr(*lhs);
+                            self.gen_expr(*rhs);
+                        },
                     },
                     _ => {
                         self.gen_expr(*lhs);
                         self.gen_expr(*rhs);
-                    }
+                    },
                 };
 
                 add_mnemonic!(self, "pop rdi");
@@ -263,6 +275,7 @@ impl Generator {
                 // 初期化式
                 if let Some(init) = init {
                     self.gen_expr(init);
+                    add_mnemonic!(self, "pop rax");
                 }
 
                 add_label!(self, ".Lbegin", label_num);
@@ -277,9 +290,11 @@ impl Generator {
 
                 // 文
                 self.gen_stmt(*stmt);
+                //add_mnemonic!(self, "pop rax");
 
                 if let Some(loop_expr) = loop_expr {
                     self.gen_expr(loop_expr);
+                    //add_mnemonic!(self, "pop rax");
                 }
 
                 add_mnemonic!(self, "jmp .Lbegin{}", label_num);
