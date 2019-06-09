@@ -37,16 +37,21 @@ pub enum Literal {
 }
 
 #[derive(Debug, Clone)]
+pub enum Location {
+    Local(usize), // rbpからのオフセット
+}
+
+#[derive(Debug, Clone)]
 pub struct Variable {
     pub ty: Type,
-    pub offset: usize,
+    pub location: Location,
 }
 
 impl Variable {
-    pub fn new(ty: Type, offset: usize) -> Self {
+    pub fn new(ty: Type, location: Location) -> Self {
         Self {
             ty,
-            offset,
+            location,
         }
     }
 }
@@ -99,7 +104,7 @@ pub enum Stmt {
     While(Expr, Box<Stmt>),
     For(Option<Expr>, Option<Expr>, Option<Expr>, Box<Stmt>),
     Block(Vec<Stmt>),
-    Define(Type, usize),
+    Define(Variable),
 }
 
 #[derive(Debug)]
@@ -222,7 +227,7 @@ impl Parser {
 
                 let offset = self.stack_size;
                 self.define_variable(&ident, &ty);
-                Some(Variable::new(ty, offset))
+                Some(Variable::new(ty, Location::Local(offset)))
             },
             None => {
                 self.add_error("識別子ではありません");
@@ -234,11 +239,11 @@ impl Parser {
     fn define_variable(&mut self, ident: &str, ty: &Type) {
         match ty {
             Type::Array(_, size) => {
-                self.variables.insert(ident.to_string(), Variable::new(ty.clone(), self.stack_size + 8 * (size - 1)));
+                self.variables.insert(ident.to_string(), Variable::new(ty.clone(), Location::Local(self.stack_size + 8 * (size - 1))));
                 self.stack_size += 8 * size;
             },
             _ => {
-                self.variables.insert(ident.to_string(), Variable::new(ty.clone(), self.stack_size));
+                self.variables.insert(ident.to_string(), Variable::new(ty.clone(), Location::Local(self.stack_size)));
                 self.stack_size += 8;
             }
         };
@@ -467,7 +472,7 @@ impl Parser {
         let variable = self.expect_define();
         if let Some(variable) = variable {
             expect!(self, TokenKind::Semicolon);
-            return Stmt::Define(variable.ty, variable.offset);
+            return Stmt::Define(variable);
         }
 
         let stmt = match self.tokens[self.pos].kind {
@@ -580,7 +585,12 @@ impl Parser {
                         }
 
                         let mut args: Vec<Variable> = self.variables.clone().into_iter().map(|(_, v)| v).collect();
-                        args.sort_by_key(|v| v.offset);
+                        args.sort_by_key(|v| {
+                            match v.location {
+                                Location::Local(offset) => offset,
+                                _ => panic!("引数がグローバル変数です"),
+                            }
+                        });
 
                         self.functions.insert(ident.clone(), Function::new(Type::Int, self.variables.clone().into_iter().map(|(_, v)| v).collect()));
 

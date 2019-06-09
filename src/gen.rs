@@ -1,4 +1,4 @@
-use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration, Type, Variable};
+use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration, Type, Variable, Location};
 
 pub struct Generator {
     pub code: String,
@@ -66,7 +66,13 @@ impl Generator {
                 add_mnemonic!(self, "mov rax, [rax]");
             },
             Expr::Variable(variable) => {
-                add_mnemonic!(self, "mov rax, [rbp-{}]", variable.offset + 8);
+                match variable.location {
+                    Location::Local(offset) => add_mnemonic!(self, "mov rax, [rbp-{}]", offset + 8),
+                    _ => {
+                        // TODO: グローバル変数
+                        panic!("グローバル変数には対応していません");
+                    },
+                };
             },
             _ => {
                 self.gen_expr(expr);
@@ -83,10 +89,18 @@ impl Generator {
                 Some(8)
             },
             Expr::Variable(variable) => {
-                add_mnemonic!(self, "mov rax, rbp");
-                add_mnemonic!(self, "sub rax, {}", variable.offset + 8);
-                add_mnemonic!(self, "push rax");
-                Some(variable.ty.get_size())
+                match variable.location {
+                    Location::Local(offset) => {
+                        add_mnemonic!(self, "mov rax, rbp");
+                        add_mnemonic!(self, "sub rax, {}", offset + 8);
+                        add_mnemonic!(self, "push rax");
+                        Some(variable.ty.get_size())
+                    },
+                    _ => {
+                        // TODO: グローバル変数
+                        panic!("グローバル変数には対応していません");
+                    },
+                }
             },
             _ => {
                 println!("代入の左辺値が変数ではありません");
@@ -117,9 +131,17 @@ impl Generator {
                 }
             },
             Expr::Address(variable) => {
-                add_mnemonic!(self, "mov rax, rbp");
-                add_mnemonic!(self, "sub rax, {}", variable.offset + 8);
-                add_mnemonic!(self, "push rax");
+                match variable.location {
+                    Location::Local(offset) => {
+                        add_mnemonic!(self, "mov rax, rbp");
+                        add_mnemonic!(self, "sub rax, {}", offset + 8);
+                        add_mnemonic!(self, "push rax");
+                    },
+                    _ => {
+                        // TODO: グローバル変数
+                        panic!("グローバル変数には対応していません");
+                    },
+                };
             },
             Expr::Assign(lhs, rhs) => {
                 let size = self.gen_lvalue(*lhs);
@@ -303,7 +325,7 @@ impl Generator {
             Stmt::Block(stmt_list) => {
                 for stmt in stmt_list {
                     let must_pop = match stmt {
-                        Stmt::Return(_) | Stmt::Define(_, _) => false,
+                        Stmt::Return(_) | Stmt::Define(_) => false,
                         _ => true,
                     };
 
@@ -330,7 +352,10 @@ impl Generator {
                 // スタックに引数の値をプッシュする
                 for (i, arg) in args.into_iter().enumerate() {
                     let register = self.get_size_register(arg.ty.get_size(), ARG_REGISTERS[5 - i]).unwrap();
-                    add_mnemonic!(self, "mov [rbp-{}], {}", arg.offset + 8, register);
+                    match arg.location {
+                        Location::Local(offset) => add_mnemonic!(self, "mov [rbp-{}], {}", offset + 8, register),
+                        _ => panic!("引数がグローバル変数です"),
+                    };
                 }
 
                 self.gen_stmt(block);
