@@ -39,6 +39,7 @@ pub enum Literal {
 #[derive(Debug, Clone)]
 pub enum Location {
     Local(usize), // rbpからのオフセット
+    Global(String), // ラベル
 }
 
 #[derive(Debug, Clone)]
@@ -125,10 +126,14 @@ impl Function {
 #[derive(Debug)]
 pub enum Declaration {
     Func(String, Vec<Variable>, usize, Stmt), // 関数名, 引数の数, スタックのサイズ, 処理
+    GlobalVariable(Variable), // 変数名, 変数
 }
 
 #[derive(Debug)]
-pub struct Program(pub Vec<Declaration>);
+pub struct Program {
+    pub declarations: Vec<Declaration>,
+    pub global_variables: HashMap<String, Variable>,
+}
 
 #[derive(Debug)]
 pub struct ParseError {
@@ -142,6 +147,7 @@ pub struct ParseError {
 #[derive(Debug)]
 pub struct Parser {
     pub errors: Vec<ParseError>,
+    global_variables: HashMap<String, Variable>,
     variables: HashMap<String, Variable>,
     functions: HashMap<String, Function>,
     tokens: Vec<Token>,
@@ -163,6 +169,7 @@ impl Parser {
             pos: 0,
             tokens,
             errors: Vec::new(),
+            global_variables: HashMap::new(),
             variables: HashMap::new(),
             functions: HashMap::new(),
             stack_size: 0,
@@ -296,9 +303,9 @@ impl Parser {
                 };
             } else {
                 // 変数
-                return match self.variables.get(&ident) {
-                    Some(variable) => Expr::Variable(variable.clone()),
-                    None => {
+                return match (self.variables.get(&ident), self.global_variables.get(&ident)) {
+                    (Some(variable), _) | (_, Some(variable)) => Expr::Variable(variable.clone()),
+                    _ => {
                         self.add_error_token(&format!("変数 \"{}\" が見つかりません", ident), self.pos - 1);
                         Expr::Invalid
                     },
@@ -561,58 +568,60 @@ impl Parser {
     }
 
     pub fn parse_declaration(&mut self) -> Option<Declaration> {
-        match self.tokens[self.pos].kind {
-            TokenKind::Int => {
-                self.pos += 1;
-                let ident = self.expect_ident();
-                match ident {
-                    Some(ident) => {
-                        expect!(self, TokenKind::Lparen);
+        let ty = self.expect_type();
+        return if let Some(ty) = ty {
+            let ident = self.expect_ident();
+            if let Some(ident) = ident {
+                if self.consume(TokenKind::Lparen) {
+                    // 関数定義
+                    self.stack_size = 0;
 
-                        self.stack_size = 0;
+                    // 引数
+                    self.variables = HashMap::<String, Variable>::new();
+                    loop {
+                        let _ = self.expect_define();
 
-                        // 引数
-                        self.variables = HashMap::<String, Variable>::new();
-                        loop {
-                            let _ = self.expect_define();
-
-                            if self.consume(TokenKind::Rparen) {
-                                break;
-                            } else if !self.consume(TokenKind::Comma) {
-                                self.add_error("',' か ')' ではないトークンです");
-                                break;
-                            }
+                        if self.consume(TokenKind::Rparen) {
+                            break;
+                        } else if !self.consume(TokenKind::Comma) {
+                            self.add_error("',' か ')' ではないトークンです");
+                            break;
                         }
-
-                        let mut args: Vec<Variable> = self.variables.clone().into_iter().map(|(_, v)| v).collect();
-                        args.sort_by_key(|v| {
-                            match v.location {
-                                Location::Local(offset) => offset,
-                                _ => panic!("引数がグローバル変数です"),
-                            }
-                        });
-
-                        self.functions.insert(ident.clone(), Function::new(Type::Int, self.variables.clone().into_iter().map(|(_, v)| v).collect()));
-
-                        let stmt = self.parse_stmt();
-                        match stmt {
-                            Stmt::Block(_) => {},
-                            _ => self.add_error("ブロックではありません"),
-                        };
-
-                        Some(Declaration::Func(ident, args, self.stack_size, stmt))
-                    },
-                    None => {
-                        self.add_error("識別子ではありません");
-                        None
                     }
+
+                    let mut args: Vec<Variable> = self.variables.clone().into_iter().map(|(_, v)| v).collect();
+                    args.sort_by_key(|v| {
+                        match v.location {
+                            Location::Local(offset) => offset,
+                            _ => panic!("引数がグローバル変数です"),
+                        }
+                    });
+
+                    self.functions.insert(ident.clone(), Function::new(Type::Int, self.variables.clone().into_iter().map(|(_, v)| v).collect()));
+
+                    let stmt = self.parse_stmt();
+                    match stmt {
+                        Stmt::Block(_) => {},
+                        _ => self.add_error("ブロックではありません"),
+                    };
+
+                    Some(Declaration::Func(ident, args, self.stack_size, stmt))
+                } else {
+                    // グローバル変数定義
+                    // TODO: 配列を定義できない
+                    expect!(self, TokenKind::Semicolon);
+
+                    let variable = Variable::new(ty, Location::Global(ident.clone()));
+                    self.global_variables.insert(ident.clone(), variable.clone());
+                    Some(Declaration::GlobalVariable(variable))
                 }
-            },
-            _ => {
-                self.pos += 1;
-                self.add_error("関数定義ではありません");
+            } else {
+                self.add_error("識別子ではありません");
                 None
-            },
+            }
+        } else {
+            self.add_error("型ではありません");
+            None
         }
     }
 
@@ -623,6 +632,10 @@ impl Parser {
                 declarations.push(declaration);
             }
         }
-        Program(declarations)
+
+        Program{
+            declarations,
+            global_variables: self.global_variables.clone(),
+        }
     }
 }

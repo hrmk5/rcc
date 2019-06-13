@@ -68,9 +68,8 @@ impl Generator {
             Expr::Variable(variable) => {
                 match variable.location {
                     Location::Local(offset) => add_mnemonic!(self, "mov rax, [rbp-{}]", offset + 8),
-                    _ => {
-                        // TODO: グローバル変数
-                        panic!("グローバル変数には対応していません");
+                    Location::Global(name) => {
+                        add_mnemonic!(self, "mov rax, {}[rip]", &name);
                     },
                 };
             },
@@ -96,9 +95,10 @@ impl Generator {
                         add_mnemonic!(self, "push rax");
                         Some(variable.ty.get_size())
                     },
-                    _ => {
-                        // TODO: グローバル変数
-                        panic!("グローバル変数には対応していません");
+                    Location::Global(name) => {
+                        add_mnemonic!(self, "mov rax, OFFSET FLAT:{}", &name);
+                        add_mnemonic!(self, "push rax");
+                        Some(variable.ty.get_size())
                     },
                 }
             },
@@ -137,9 +137,9 @@ impl Generator {
                         add_mnemonic!(self, "sub rax, {}", offset + 8);
                         add_mnemonic!(self, "push rax");
                     },
-                    _ => {
-                        // TODO: グローバル変数
-                        panic!("グローバル変数には対応していません");
+                    Location::Global(name) => {
+                        add_mnemonic!(self, "mov rax, OFFSET FLAT:{}", &name);
+                        add_mnemonic!(self, "push rax");
                     },
                 };
             },
@@ -360,13 +360,22 @@ impl Generator {
 
                 self.gen_stmt(block);
             },
+            _ => {},
         }
     }
 
     pub fn gen(&mut self, program: Program) {
         self.code.push_str(".intel_syntax noprefix\n");
         self.code.push_str(".global main\n");
-        for declaration in program.0 {
+
+        for (name, variable) in program.global_variables {
+            self.code.push_str(&format!(".comm {},{}\n", name, match variable.ty {
+                Type::Array(_, size) => 8 * size,
+                _ => 8,
+            }));
+        }
+
+        for declaration in program.declarations {
             self.gen_declaration(declaration);
         }
     }
