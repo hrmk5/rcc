@@ -210,26 +210,42 @@ impl Parser {
         }
     }
 
+    fn expect_subscript(&mut self) -> Option<usize> {
+        if self.consume(TokenKind::Lbracket) {
+            let result = match self.tokens[self.pos].kind {
+                TokenKind::Number(num) => match num.try_into() {
+                    Ok(num) => Some(num),
+                    _ => {
+                        self.add_error("大きすぎる値です");
+                        None
+                    },
+                },
+                TokenKind::Sub => {
+                    self.add_error("負の値です");
+                    self.pos += 1;
+                    None
+                },
+                _ => {
+                    self.add_error("数値ではありません");
+                    None
+                },
+            };
+            self.pos += 1;
+            expect!(self, TokenKind::Rbracket);
+            result
+        } else {
+            None
+        }
+    }
+
     fn expect_define(&mut self) -> Option<Variable> {
         let ty = self.expect_type()?;
         let ident = self.expect_ident();
         match ident {
             Some(ident) => {
                 let mut ty = ty;
-                if self.consume(TokenKind::Lbracket) {
-                    match self.tokens[self.pos].kind {
-                        TokenKind::Number(num) => match num.try_into() {
-                            Ok(num) => ty = Type::Array(Box::new(ty), num),
-                            _ => self.add_error("大きすぎる値です"),
-                        },
-                        TokenKind::Sub => {
-                            self.add_error("負の値です");
-                            self.pos += 1;
-                        },
-                        _ => self.add_error("数値ではありません"),
-                    }
-                    self.pos += 1;
-                    expect!(self, TokenKind::Rbracket);
+                if let Some(num) = self.expect_subscript() {
+                    ty = Type::Array(Box::new(ty), num);
                 }
 
                 let offset = self.stack_size;
@@ -608,7 +624,13 @@ impl Parser {
                     Some(Declaration::Func(ident, args, self.stack_size, stmt))
                 } else {
                     // グローバル変数定義
-                    // TODO: 配列を定義できない
+
+                    // 添字演算子があったら配列型にする
+                    let mut ty = ty;
+                    if let Some(size) = self.expect_subscript() {
+                        ty = Type::Array(Box::new(ty), size);
+                    }
+
                     expect!(self, TokenKind::Semicolon);
 
                     let variable = Variable::new(ty, Location::Global(ident.clone()));
