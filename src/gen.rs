@@ -342,6 +342,15 @@ impl Generator {
 
     pub fn gen_declaration(&mut self, declaration: Declaration) {
         match declaration {
+            Declaration::GlobalVariable(variable) => match variable.location {
+                Location::Global(name) => {
+                    self.code.push_str(&format!(".comm {},{}\n", name, match variable.ty {
+                        Type::Array(_, size) => 8 * size,
+                        _ => 8,
+                    }));
+                },
+                _ => panic!("グローバル変数ではありません"),
+            },
             Declaration::Func(name, args, stack_size, block) => {
                 add_label!(self, &name);
 
@@ -367,13 +376,6 @@ impl Generator {
     pub fn gen(&mut self, program: Program) {
         self.code.push_str(".intel_syntax noprefix\n");
         self.code.push_str(".global main\n");
-
-        for (name, variable) in program.global_variables {
-            self.code.push_str(&format!(".comm {},{}\n", name, match variable.ty {
-                Type::Array(_, size) => 8 * size,
-                _ => 8,
-            }));
-        }
 
         for declaration in program.declarations {
             self.gen_declaration(declaration);
