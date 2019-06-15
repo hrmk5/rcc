@@ -25,6 +25,15 @@ macro_rules! add_label {
     };
 }
 
+macro_rules! global {
+    ($variable: expr) => {
+        match $variable.location {
+            Location::Global(name) => name,
+            _ => panic!("グローバル変数ではありません"),
+        }
+    };
+}
+
 impl Generator {
     pub fn new() -> Self {
         Generator {
@@ -342,15 +351,6 @@ impl Generator {
 
     pub fn gen_declaration(&mut self, declaration: Declaration) {
         match declaration {
-            Declaration::GlobalVariable(variable) => match variable.location {
-                Location::Global(name) => {
-                    self.code.push_str(&format!(".comm {},{}\n", name, match variable.ty {
-                        Type::Array(_, size) => 8 * size,
-                        _ => 8,
-                    }));
-                },
-                _ => panic!("グローバル変数ではありません"),
-            },
             Declaration::Func(name, args, stack_size, block) => {
                 add_label!(self, &name);
 
@@ -377,6 +377,18 @@ impl Generator {
         self.code.push_str(".intel_syntax noprefix\n");
         self.code.push_str(".global main\n");
 
+        self.code.push_str(".data\n");
+        for variable in program.global_variables {
+            add_mnemonic!(self, ".align {}", variable.ty.get_size());
+            add_label!(self, global!(variable));
+            add_mnemonic!(self, "{}", match variable.ty {
+                Type::Int => ".int 0".to_string(),
+                Type::Pointer(_) => ".long 0".to_string(),
+                Type::Array(ty, size) => format!(".ascii \"{}\"", "\\0".repeat(ty.get_size()).repeat(size)),
+            });
+        }
+
+        self.code.push_str(".text\n");
         for declaration in program.declarations {
             self.gen_declaration(declaration);
         }

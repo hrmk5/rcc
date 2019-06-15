@@ -132,6 +132,7 @@ pub enum Declaration {
 #[derive(Debug)]
 pub struct Program {
     pub declarations: Vec<Declaration>,
+    pub global_variables: Vec<Variable>,
 }
 
 #[derive(Debug)]
@@ -656,6 +657,7 @@ impl Parser {
 
         Program{
             declarations,
+            global_variables: self.global_variables.clone().into_iter().map(|(_, v)| v).collect(),
         }
     }
 }
