@@ -105,7 +105,7 @@ impl Generator {
                         Some(variable.ty.get_size())
                     },
                     Location::Global(name) => {
-                        add_mnemonic!(self, "mov rax, OFFSET FLAT:{}", &name);
+                        add_mnemonic!(self, "lea rax, {}[rip]", &name);
                         add_mnemonic!(self, "push rax");
                         Some(variable.ty.get_size())
                     },
@@ -147,7 +147,7 @@ impl Generator {
                         add_mnemonic!(self, "push rax");
                     },
                     Location::Global(name) => {
-                        add_mnemonic!(self, "mov rax, OFFSET FLAT:{}", &name);
+                        add_mnemonic!(self, "lea rax, {}[rip]", &name);
                         add_mnemonic!(self, "push rax");
                     },
                 };
