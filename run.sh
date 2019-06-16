@@ -1,6 +1,11 @@
 input="$1"
 
-./target/debug/rcc.exe "$input" | tee tmp.s
+cargo run --quiet "$input" > tmp.s
+if [ $? -ne 0 ]; then
+    cat tmp.s
+    exit 1
+fi
+
 gcc -o tmp tmp.s
 ./tmp
 echo $?
