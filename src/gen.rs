@@ -174,20 +174,20 @@ impl Generator {
             Expr::Infix(kind, lhs, rhs) => {
                 match kind.clone() {
                     Infix::Add | Infix::Sub => match (lhs.get_type(), rhs.get_type()) {
-                        (Some(Type::Pointer(_)), Some(Type::Int)) | (Some(Type::Array(_, _)), Some(Type::Int)) => {
+                        (Some(Type::Pointer(ty)), Some(Type::Int)) | (Some(Type::Array(ty, _)), Some(Type::Int)) => {
                             self.gen_expr(*lhs);
                             self.gen_expr(*rhs);
-                            // rhs を8倍にする
+                            // rhsにポインタか配列の型のサイズを掛ける
                             add_mnemonic!(self, "pop rdi");
-                            add_mnemonic!(self, "mov rax, 8");
+                            add_mnemonic!(self, "mov rax, {}", ty.get_size());
                             add_mnemonic!(self, "imul rdi");
                             add_mnemonic!(self, "push rax");
                         },
-                        (Some(Type::Int), Some(Type::Pointer(_))) | (Some(Type::Int), Some(Type::Array(_, _))) => {
+                        (Some(Type::Int), Some(Type::Pointer(ty))) | (Some(Type::Int), Some(Type::Array(ty, _))) => {
                             self.gen_expr(*lhs);
-                            // lhs を8倍にする
+                            // lhsにポインタか配列の型のサイズを掛ける
                             add_mnemonic!(self, "pop rdi");
-                            add_mnemonic!(self, "mov rax, 8");
+                            add_mnemonic!(self, "mov rax, {}", ty.get_size());
                             add_mnemonic!(self, "imul rdi");
                             add_mnemonic!(self, "push rax");
 
