@@ -3,6 +3,7 @@ use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration, Type, Vari
 pub struct Generator {
     pub code: String,
     label_num: u32,
+    string_count: u32,
 }
 
 const ARG_REGISTERS: [&str; 6] = ["r9", "r8", "rcx", "rdx", "rsi", "rdi"];
@@ -39,6 +40,7 @@ impl Generator {
         Generator {
             code: String::new(),
             label_num: 0,
+            string_count: 0,
         }
     }
 
@@ -135,6 +137,11 @@ impl Generator {
         match expr {
             Expr::Literal(Literal::Number(num)) => {
                 add_mnemonic!(self, "push {}", num);
+            },
+            Expr::Literal(Literal::String) => {
+                add_mnemonic!(self, "lea rax, .Ltext{}[rip]", self.string_count);
+                add_mnemonic!(self, "push rax");
+                self.string_count += 1;
             },
             Expr::Variable(_) | Expr::Dereference(_) => {
                 let size = self.gen_lvalue(expr.clone());
@@ -414,6 +421,14 @@ impl Generator {
                 Type::Pointer(_) => ".long 0".to_string(),
                 Type::Array(ty, size) => format!(".ascii \"{}\"", "\\0".repeat(ty.get_size()).repeat(size)),
             });
+        }
+
+        // 文字列リテラル
+        // .rodataに配置
+        self.code.push_str(".section .rodata\n");
+        for (i, string) in program.string_list.into_iter().enumerate() {
+            add_label!(self, ".Ltext", i);
+            add_mnemonic!(self, ".string \"{}\"", string);
         }
 
         self.code.push_str(".text\n");

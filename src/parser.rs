@@ -36,6 +36,7 @@ pub enum Infix {
 #[derive(Debug, Clone)]
 pub enum Literal {
     Number(i32),
+    String,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +76,7 @@ impl Expr {
     pub fn get_type(&self) -> Option<Type> {
         match self {
             Expr::Literal(Literal::Number(_)) => Some(Type::Int),
+            Expr::Literal(Literal::String) => Some(Type::Pointer(Box::new(Type::Char))),
             Expr::Variable(variable) => Some(variable.ty.clone()),
             Expr::Dereference(expr) => match expr.get_type() {
                 Some(Type::Pointer(box ty)) => Some(ty.clone()),
@@ -135,6 +137,7 @@ pub enum Declaration {
 pub struct Program {
     pub declarations: Vec<Declaration>,
     pub global_variables: Vec<Variable>,
+    pub string_list: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -150,6 +153,7 @@ pub struct ParseError {
 pub struct Parser {
     pub errors: Vec<ParseError>,
     global_variables: HashMap<String, Variable>,
+    string_list: Vec<String>,
     variables: HashMap<String, Variable>,
     functions: HashMap<String, Function>,
     tokens: Vec<Token>,
@@ -172,6 +176,7 @@ impl Parser {
             tokens,
             errors: Vec::new(),
             global_variables: HashMap::new(),
+            string_list: Vec::new(),
             variables: HashMap::new(),
             functions: HashMap::new(),
             stack_size: 0,
@@ -344,6 +349,11 @@ impl Parser {
             TokenKind::Number(num) => {
                 self.pos += 1;
                 Expr::Literal(Literal::Number(num))
+            },
+            TokenKind::String(ref s) => {
+                self.pos += 1;
+                self.string_list.push(s.clone());
+                Expr::Literal(Literal::String)
             },
             _ => {
                 self.add_error("数値でも開きカッコでもないトークンです");
@@ -659,9 +669,10 @@ impl Parser {
             }
         }
 
-        Program{
+        Program {
             declarations,
             global_variables: self.global_variables.clone().into_iter().map(|(_, v)| v).collect(),
+            string_list: self.string_list.clone(),
         }
     }
 }

@@ -31,6 +31,7 @@ pub enum TokenKind {
     Lbracket,
     Rbracket,
     Char,
+    String(String),
 }
 
 impl ToString for TokenKind {
@@ -67,6 +68,7 @@ impl ToString for TokenKind {
             TokenKind::Lbracket => "[",
             TokenKind::Rbracket => "]",
             TokenKind::Char => "char",
+            TokenKind::String(_) => "string",
         })
     }
 }
@@ -202,6 +204,29 @@ impl Tokenizer {
         }, start_col, self.col);
     }
 
+    pub fn tokenize_string(&mut self) {
+        // " を消費
+        self.next();
+
+        let start_pos = self.pos;
+        let start_col = self.col;
+        loop {
+            match self.ch {
+                '"' => {
+                    self.next();
+                    break;
+                },
+                '\0' | '\n' => {
+                    self.add_error("対応する \" がありません");
+                    return;
+                },
+                _ => self.next(),
+            };
+        }
+
+        self.add_token(TokenKind::String(self.input[start_pos..self.pos - 1].iter().collect()), start_col, self.col);
+    }
+
     pub fn tokenize(&mut self) {
         loop {
             self.skip_whitespace();
@@ -229,6 +254,7 @@ impl Tokenizer {
                 ';' => self.add_token_and_skip(TokenKind::Semicolon, 1),
                 ',' => self.add_token_and_skip(TokenKind::Comma, 1),
                 '&' => self.add_token_and_skip(TokenKind::Ampersand, 1),
+                '"' => self.tokenize_string(),
                 '\0' => break,
                 _ => { self.add_error("Unexpected token"); self.next() },
             }
