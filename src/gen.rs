@@ -76,7 +76,7 @@ impl Generator {
             },
             Expr::Variable(variable) => {
                 match variable.location {
-                    Location::Local(offset) => add_mnemonic!(self, "mov rax, [rbp-{}]", offset + 8),
+                    Location::Local(offset) => add_mnemonic!(self, "mov rax, [rbp-{}]", offset),
                     Location::Global(name) => {
                         add_mnemonic!(self, "mov rax, {}[rip]", &name);
                     },
@@ -97,19 +97,25 @@ impl Generator {
                 Some(8)
             },
             Expr::Variable(variable) => {
+                // 変数のアドレスをプッシュする
                 match variable.location {
                     Location::Local(offset) => {
                         add_mnemonic!(self, "mov rax, rbp");
-                        add_mnemonic!(self, "sub rax, {}", offset + 8);
+                        add_mnemonic!(self, "sub rax, {}", offset);
                         add_mnemonic!(self, "push rax");
-                        Some(variable.ty.get_size())
                     },
                     Location::Global(name) => {
                         add_mnemonic!(self, "lea rax, {}[rip]", &name);
                         add_mnemonic!(self, "push rax");
-                        Some(variable.ty.get_size())
                     },
-                }
+                };
+
+                // 変数のサイズを返す
+                // 配列の場合はポインタのサイズを返す
+                Some(match variable.ty {
+                    Type::Array(_, _) => 8,
+                    _ => variable.ty.get_size(),
+                })
             },
             _ => {
                 println!("代入の左辺値が変数ではありません");
@@ -125,11 +131,13 @@ impl Generator {
             },
             Expr::Variable(_) | Expr::Dereference(_) => {
                 let size = self.gen_lvalue(expr.clone());
+
                 if let Some(size) = size {
                     let size_str = self.get_size_str(size).unwrap();
                     let register = self.get_size_register(size, "rax").unwrap();
 
                     match expr {
+                        // 配列型だったらメモリアクセスせずにアドレスを返す
                         Expr::Variable(Variable { ty: Type::Array(_, _), .. }) => {},
                         _ => {
                             add_mnemonic!(self, "pop rax");
@@ -143,7 +151,7 @@ impl Generator {
                 match variable.location {
                     Location::Local(offset) => {
                         add_mnemonic!(self, "mov rax, rbp");
-                        add_mnemonic!(self, "sub rax, {}", offset + 8);
+                        add_mnemonic!(self, "sub rax, {}", offset);
                         add_mnemonic!(self, "push rax");
                     },
                     Location::Global(name) => {
@@ -362,7 +370,7 @@ impl Generator {
                 for (i, arg) in args.into_iter().enumerate() {
                     let register = self.get_size_register(arg.ty.get_size(), ARG_REGISTERS[5 - i]).unwrap();
                     match arg.location {
-                        Location::Local(offset) => add_mnemonic!(self, "mov [rbp-{}], {}", offset + 8, register),
+                        Location::Local(offset) => add_mnemonic!(self, "mov [rbp-{}], {}", offset, register),
                         _ => panic!("引数がグローバル変数です"),
                     };
                 }
@@ -378,9 +386,17 @@ impl Generator {
         self.code.push_str(".global main\n");
 
         self.code.push_str(".data\n");
+        // グローバル変数
         for variable in program.global_variables {
-            add_mnemonic!(self, ".align {}", variable.ty.get_size());
+            // アラインメント
+            // 配列は要素の型のサイズをアラインメントにする
+            let align = match variable.ty {
+                Type::Array(ref ty, _) => ty.get_size(),
+                _ => variable.ty.get_size(),
+            };
+            add_mnemonic!(self, ".align {}", align);
             add_label!(self, global!(variable));
+            // 初期値
             add_mnemonic!(self, "{}", match variable.ty {
                 Type::Int => ".int 0".to_string(),
                 Type::Pointer(_) => ".long 0".to_string(),

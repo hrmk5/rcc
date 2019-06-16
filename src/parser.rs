@@ -14,7 +14,7 @@ impl Type {
         match self {
             Type::Int => 4,
             Type::Pointer(_) => 8,
-            Type::Array(_, _) => 8,
+            Type::Array(ty, size) => ty.get_size() * size,
         }
     }
 }
@@ -248,9 +248,8 @@ impl Parser {
                     ty = Type::Array(Box::new(ty), num);
                 }
 
-                let offset = self.stack_size;
-                self.define_variable(&ident, &ty);
-                Some(Variable::new(ty, Location::Local(offset)))
+                let variable = self.define_variable(&ident, &ty);
+                Some(variable)
             },
             None => {
                 self.add_error("識別子ではありません");
@@ -259,17 +258,18 @@ impl Parser {
         }
     }
 
-    fn define_variable(&mut self, ident: &str, ty: &Type) {
-        match ty {
-            Type::Array(_, size) => {
-                self.variables.insert(ident.to_string(), Variable::new(ty.clone(), Location::Local(self.stack_size + 8 * (size - 1))));
-                self.stack_size += 8 * size;
-            },
-            _ => {
-                self.variables.insert(ident.to_string(), Variable::new(ty.clone(), Location::Local(self.stack_size)));
-                self.stack_size += 8;
-            }
-        };
+    fn define_variable(&mut self, ident: &str, ty: &Type) -> Variable {
+        let size = ty.get_size();
+        self.stack_size += size;
+        // アラインメント
+        let padding = size - self.stack_size % size;
+        if padding != size {
+            self.stack_size += padding;
+        }
+
+        let variable = Variable::new(ty.clone(), Location::Local(self.stack_size));
+        self.variables.insert(ident.to_string(), variable.clone());
+        variable
     }
 
     fn parse_pointer(&mut self, ty: Type) -> Type {
@@ -592,7 +592,7 @@ impl Parser {
                     // 関数定義
                     self.stack_size = 0;
 
-                    // 引数
+                    // 引数をパース
                     self.variables = HashMap::<String, Variable>::new();
                     loop {
                         let _ = self.expect_define();
@@ -605,6 +605,7 @@ impl Parser {
                         }
                     }
 
+                    // 引数をVec<Variable>に変換
                     let mut args: Vec<Variable> = self.variables.clone().into_iter().map(|(_, v)| v).collect();
                     args.sort_by_key(|v| {
                         match v.location {
