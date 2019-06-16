@@ -387,7 +387,7 @@ impl Parser {
             },
             TokenKind::SizeOf => {
                 self.pos += 1;
-                let expr = self.parse_expr();
+                let expr = self.parse_unary();
                 let ty = expr.get_type();
                 match ty {
                     Some(ty) => Expr::Literal(Literal::Number(ty.get_size() as i32)),
