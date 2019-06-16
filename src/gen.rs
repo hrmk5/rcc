@@ -54,6 +54,13 @@ impl Generator {
 
     fn get_size_register(&self, size: usize, register: &'static str) -> Option<&'static str> {
         match size {
+            1 => match register {
+                "rax" => Some("al"),
+                "rbx" => Some("bl"),
+                "rcx" => Some("cl"),
+                "rdx" => Some("dl"),
+                _ => None,
+            },
             4 => match register {
                 "rax" => Some("eax"),
                 "rbx" => Some("ebx"),
@@ -134,14 +141,18 @@ impl Generator {
 
                 if let Some(size) = size {
                     let size_str = self.get_size_str(size).unwrap();
-                    let register = self.get_size_register(size, "rax").unwrap();
+                    let register = self.get_size_register(if size == 1 { 4 } else { size }, "rax").unwrap();
+                    let mov = match size {
+                        1 => "movsx",
+                        _ => "mov",
+                    };
 
                     match expr {
                         // 配列型だったらメモリアクセスせずにアドレスを返す
                         Expr::Variable(Variable { ty: Type::Array(_, _), .. }) => {},
                         _ => {
                             add_mnemonic!(self, "pop rax");
-                            add_mnemonic!(self, "mov {}, {} [rax]", register, size_str);
+                            add_mnemonic!(self, "{} {}, {} [rax]", mov, register, size_str);
                             add_mnemonic!(self, "push rax");
                         },
                     };
@@ -165,10 +176,10 @@ impl Generator {
                 if let Some(size) = size {
                     self.gen_expr(*rhs);
 
-                    add_mnemonic!(self, "pop rdi");
+                    add_mnemonic!(self, "pop rdx");
                     add_mnemonic!(self, "pop rax");
-                    add_mnemonic!(self, "mov {} [rax], {}", self.get_size_str(size).unwrap(), self.get_size_register(size, "rdi").unwrap());
-                    add_mnemonic!(self, "push rdi");
+                    add_mnemonic!(self, "mov {} [rax], {}", self.get_size_str(size).unwrap(), self.get_size_register(size, "rdx").unwrap());
+                    add_mnemonic!(self, "push rdx");
                 }
             },
             Expr::Infix(kind, lhs, rhs) => {
@@ -399,6 +410,7 @@ impl Generator {
             // 初期値
             add_mnemonic!(self, "{}", match variable.ty {
                 Type::Int => ".int 0".to_string(),
+                Type::Char => ".byte 0".to_string(),
                 Type::Pointer(_) => ".long 0".to_string(),
                 Type::Array(ty, size) => format!(".ascii \"{}\"", "\\0".repeat(ty.get_size()).repeat(size)),
             });

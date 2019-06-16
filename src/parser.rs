@@ -5,6 +5,7 @@ use std::convert::TryInto;
 #[derive(Debug, Clone)]
 pub enum Type {
     Int,
+    Char,
     Pointer(Box<Type>),
     Array(Box<Type>, usize),
 }
@@ -13,6 +14,7 @@ impl Type {
     pub fn get_size(&self) -> usize {
         match self {
             Type::Int => 4,
+            Type::Char => 1,
             Type::Pointer(_) => 8,
             Type::Array(ty, size) => ty.get_size() * size,
         }
@@ -283,6 +285,7 @@ impl Parser {
     fn expect_type(&mut self) -> Option<Type> {
         let ty = match self.tokens[self.pos].kind {
             TokenKind::Int => Type::Int,
+            TokenKind::Char => Type::Char,
             _ => return None,
         };
 

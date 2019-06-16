@@ -30,6 +30,7 @@ pub enum TokenKind {
     SizeOf,
     Lbracket,
     Rbracket,
+    Char,
 }
 
 impl ToString for TokenKind {
@@ -65,6 +66,7 @@ impl ToString for TokenKind {
             TokenKind::SizeOf => "sizeof",
             TokenKind::Lbracket => "[",
             TokenKind::Rbracket => "]",
+            TokenKind::Char => "char",
         })
     }
 }
@@ -195,6 +197,7 @@ impl Tokenizer {
             "for" => TokenKind::For,
             "int" => TokenKind::Int,
             "sizeof" => TokenKind::SizeOf,
+            "char" => TokenKind::Char,
             _ => TokenKind::Ident(s),
         }, start_col, self.col);
     }
