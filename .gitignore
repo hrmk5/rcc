@@ -2,7 +2,6 @@
 **/*.rs.bk
 
 tmp*
-test.c
 *.o
 *.s
 
