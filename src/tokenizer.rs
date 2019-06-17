@@ -227,6 +227,16 @@ impl Tokenizer {
         self.add_token(TokenKind::String(self.input[start_pos..self.pos - 1].iter().collect()), start_col, self.col);
     }
 
+    pub fn skip_single_line_comment(&mut self) {
+        // 改行が来るまでスキップ
+        loop {
+            match self.ch {
+                '\n' => break,
+                _ => self.next(),
+            };
+        }
+    }
+
     pub fn tokenize(&mut self) {
         loop {
             self.skip_whitespace();
@@ -237,6 +247,7 @@ impl Tokenizer {
                 '+' => self.add_token_and_skip(TokenKind::Add, 1),
                 '-' => self.add_token_and_skip(TokenKind::Sub, 1),
                 '*' => self.add_token_and_skip(TokenKind::Asterisk, 1),
+                '/' if self.next_is('/') => self.skip_single_line_comment(),
                 '/' => self.add_token_and_skip(TokenKind::Div, 1),
                 '(' => self.add_token_and_skip(TokenKind::Lparen, 1),
                 ')' => self.add_token_and_skip(TokenKind::Rparen, 1),
