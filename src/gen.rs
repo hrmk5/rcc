@@ -266,6 +266,8 @@ impl Generator {
                 for register in ARG_REGISTERS[6 - arg_count..].iter() {
                     add_mnemonic!(self, "pop {}", register);
                 }
+                // 浮動小数点の引数の数
+                add_mnemonic!(self, "mov al, 0");
                 // TODO: RSP を調整する
                 // 調整してないけど動く
                 add_mnemonic!(self, "call {}", name);
