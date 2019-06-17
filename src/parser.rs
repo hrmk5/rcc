@@ -320,10 +320,7 @@ impl Parser {
                 // TODO: 引数の型チェック
                 return match self.functions.get(&ident) {
                     Some(func) => Expr::Call(ident, func.return_type.clone(), args),
-                    None => {
-                        self.add_error("関数が見つかりません");
-                        Expr::Invalid
-                    }
+                    None => Expr::Call(ident, Type::Int, args),
                 };
             } else {
                 // 変数
