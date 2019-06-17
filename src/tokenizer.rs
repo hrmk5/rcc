@@ -237,6 +237,25 @@ impl Tokenizer {
         }
     }
 
+    pub fn skip_block_comment(&mut self) {
+        // "*/" が来るまでスキップ
+        loop {
+            match self.ch {
+                '*' if self.next_is('/') => {
+                    self.next();
+                    self.next();
+                    break;
+                },
+                '\n' => {
+                    self.next();
+                    self.line += 1;
+                    self.col = 0;
+                },
+                _ => self.next(),
+            };
+        }
+    }
+
     pub fn tokenize(&mut self) {
         loop {
             self.skip_whitespace();
@@ -248,6 +267,7 @@ impl Tokenizer {
                 '-' => self.add_token_and_skip(TokenKind::Sub, 1),
                 '*' => self.add_token_and_skip(TokenKind::Asterisk, 1),
                 '/' if self.next_is('/') => self.skip_single_line_comment(),
+                '/' if self.next_is('*') => self.skip_block_comment(),
                 '/' => self.add_token_and_skip(TokenKind::Div, 1),
                 '(' => self.add_token_and_skip(TokenKind::Lparen, 1),
                 ')' => self.add_token_and_skip(TokenKind::Rparen, 1),
