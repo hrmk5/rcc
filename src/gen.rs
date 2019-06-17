@@ -61,6 +61,10 @@ impl Generator {
                 "rbx" => Some("bl"),
                 "rcx" => Some("cl"),
                 "rdx" => Some("dl"),
+                "rsi" => Some("sil"),
+                "rdi" => Some("dil"),
+                "r8" => Some("r8b"),
+                "r9" => Some("r9b"),
                 _ => None,
             },
             4 => match register {
@@ -70,6 +74,8 @@ impl Generator {
                 "rdx" => Some("edx"),
                 "rsi" => Some("esi"),
                 "rdi" => Some("edi"),
+                "r8" => Some("r8d"),
+                "r9" => Some("r9d"),
                 _ => None,
             },
             8 => Some(register),
@@ -101,9 +107,13 @@ impl Generator {
     fn gen_lvalue(&mut self, expr: Expr) -> Option<usize> {
         match expr {
             Expr::Dereference(expr) => {
+                let ty = expr.get_type();
                 self.gen_dereference(*expr);
                 add_mnemonic!(self, "push rax");
-                Some(8)
+                Some(match ty {
+                    Some(Type::Pointer(ty)) => ty.get_size(),
+                    _ => panic!("ポインタではない値を参照外ししています"),
+                })
             },
             Expr::Variable(variable) => {
                 // 変数のアドレスをプッシュする
