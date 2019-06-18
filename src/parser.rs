@@ -245,7 +245,7 @@ impl Parser {
         }
     }
 
-    fn expect_define(&mut self) -> Option<Variable> {
+    fn expect_define(&mut self, array_as_pointer: bool) -> Option<Variable> {
         let ty = self.expect_type()?;
         let ident = self.expect_ident();
         match ident {
@@ -255,7 +255,7 @@ impl Parser {
                     ty = Type::Array(Box::new(ty), num);
                 }
 
-                let variable = self.define_variable(&ident, &ty);
+                let variable = self.define_variable(&ident, &ty, array_as_pointer);
                 Some(variable)
             },
             None => {
@@ -265,8 +265,13 @@ impl Parser {
         }
     }
 
-    fn define_variable(&mut self, ident: &str, ty: &Type) -> Variable {
+    fn define_variable(&mut self, ident: &str, ty: &Type, array_as_pointer: bool) -> Variable {
+        let ty = match ty {
+            Type::Array(ty, _) if array_as_pointer => Type::Pointer(ty.clone()),
+            ty => ty.clone(),
+        };
         let size = ty.get_size();
+
         self.stack_size += size;
         // アラインメント
         let padding = size - self.stack_size % size;
@@ -502,7 +507,7 @@ impl Parser {
 
     fn parse_stmt(&mut self) -> Stmt {
         // 変数定義
-        let variable = self.expect_define();
+        let variable = self.expect_define(false);
         if let Some(variable) = variable {
             expect!(self, TokenKind::Semicolon);
             return Stmt::Define(variable);
@@ -605,7 +610,7 @@ impl Parser {
                     // 引数をパース
                     self.variables = HashMap::<String, Variable>::new();
                     loop {
-                        let _ = self.expect_define();
+                        let _ = self.expect_define(true);
 
                         if self.consume(TokenKind::Rparen) {
                             break;

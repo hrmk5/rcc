@@ -11,11 +11,9 @@ int plus(int a, int b) {
     return a + b;
 }
 
-/*
 int end(int arr[5]) {
     return arr[4];
 }
-*/
 
 int global_var;
 
@@ -81,7 +79,7 @@ int main() {
 
     expect("call", 45, plus(10, 35));
     expect("call2", 30, plus(5, 4) + plus(5, 16));
-    //expect("call3", 10, end(arr));
+    expect("call3", 10, end(arr));
 
     char ch;
 

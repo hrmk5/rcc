@@ -396,9 +396,10 @@ impl Generator {
                 add_mnemonic!(self, "mov rbp, rsp");
                 add_mnemonic!(self, "sub rsp, {}", stack_size);
 
-                // スタックに引数の値をプッシュする
+                // スタックに引数の値を格納する
                 for (i, arg) in args.into_iter().enumerate() {
-                    let register = self.get_size_register(arg.ty.get_size(), ARG_REGISTERS[5 - i]).unwrap();
+                    let size = arg.ty.get_size();
+                    let register = self.get_size_register(size, ARG_REGISTERS[5 - i]).unwrap();
                     match arg.location {
                         Location::Local(offset) => add_mnemonic!(self, "mov [rbp-{}], {}", offset, register),
                         _ => panic!("引数がグローバル変数です"),
