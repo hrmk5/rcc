@@ -130,7 +130,7 @@ impl Function {
 #[derive(Debug)]
 pub enum Declaration {
     Func(String, Vec<Variable>, usize, Stmt), // 関数名, 引数の数, スタックのサイズ, 処理
-    GlobalVariable(Variable), // 変数名, 変数
+    GlobalVariable(Variable, Option<Expr>), // 変数名, 変数, 初期化式
 }
 
 #[derive(Debug)]
@@ -414,9 +414,9 @@ impl Parser {
                 self.pos += 1;
                 let ident = self.expect_ident();
                 if let Some(ident) = ident {
-                    match self.variables.get(&ident) {
-                        Some(variable) => Expr::Address(variable.clone()),
-                        None => {
+                    match (self.variables.get(&ident), self.global_variables.get(&ident)) {
+                        (Some(variable), _) | (_, Some(variable)) => Expr::Address(variable.clone()),
+                        _ => {
                             self.add_error_token(&format!("変数 \"{}\" が見つかりません", ident), self.pos - 1);
                             Expr::Invalid
                         },
@@ -647,11 +647,25 @@ impl Parser {
                         ty = Type::Array(Box::new(ty), size);
                     }
 
+                    // = があったら初期化式をパース
+                    let init_expr = if self.consume(TokenKind::Assign) {
+                        let expr = self.parse_add();
+                        match expr {
+                            Expr::Infix(Infix::Add, _, _) | Expr::Infix(Infix::Sub, _, _) | Expr::Literal(_) | Expr::Address(_) => {},
+                            _ => {
+                                self.add_error("リテラルとポインタ演算式以外の式は使用できません");
+                            },
+                        };
+                        Some(expr)
+                    } else {
+                        None
+                    };
+
                     expect!(self, TokenKind::Semicolon);
 
                     let variable = Variable::new(ty, Location::Global(ident.clone()));
                     self.global_variables.insert(ident.clone(), variable.clone());
-                    Some(Declaration::GlobalVariable(variable))
+                    Some(Declaration::GlobalVariable(variable, init_expr))
                 }
             } else {
                 self.add_error("識別子ではありません");

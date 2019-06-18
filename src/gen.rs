@@ -412,29 +412,46 @@ impl Generator {
         }
     }
 
+    pub fn gen_global_var(&mut self, declarations: &Vec<Declaration>) {
+        self.code.push_str(".data\n");
+        // グローバル変数
+        for declaration in declarations {
+            match declaration {
+                Declaration::GlobalVariable(variable, init_expr) => {
+                    // アラインメント
+                    // 配列は要素の型のサイズをアラインメントにする
+                    let align = match variable.ty {
+                        Type::Array(ref ty, _) => ty.get_size(),
+                        _ => variable.ty.get_size(),
+                    };
+                    add_mnemonic!(self, ".align {}", align);
+                    add_label!(self, global!(variable.clone()));
+
+
+                    // 初期値
+                    match (variable.ty.clone(), init_expr.clone()) {
+                        (Type::Int, Some(Expr::Literal(Literal::Number(num)))) => add_mnemonic!(self, ".int {}", num),
+                        (Type::Int, None) => add_mnemonic!(self, ".int 0"),
+                        (Type::Char, Some(Expr::Literal(Literal::Number(num)))) => add_mnemonic!(self, ".byte {}", num),
+                        (Type::Char, None) => add_mnemonic!(self, ".byte 0"),
+                        (Type::Pointer(_), None) => add_mnemonic!(self, ".long 0"),
+                        (Type::Pointer(_), Some(Expr::Address(variable))) => add_mnemonic!(self, ".quad {}", global!(variable)),
+                        // TODO: ポインタ演算
+                        // TODO: 文字列リテラル
+                        (Type::Array(ty, size), None) => add_mnemonic!(self, ".ascii \"{}\"", "\\0".repeat(ty.get_size()).repeat(size)),
+                        _ => {},
+                    };
+                },
+                _ => {},
+            };
+        }
+    }
+
     pub fn gen(&mut self, program: Program) {
         self.code.push_str(".intel_syntax noprefix\n");
         self.code.push_str(".global main\n");
 
-        self.code.push_str(".data\n");
-        // グローバル変数
-        for variable in program.global_variables {
-            // アラインメント
-            // 配列は要素の型のサイズをアラインメントにする
-            let align = match variable.ty {
-                Type::Array(ref ty, _) => ty.get_size(),
-                _ => variable.ty.get_size(),
-            };
-            add_mnemonic!(self, ".align {}", align);
-            add_label!(self, global!(variable));
-            // 初期値
-            add_mnemonic!(self, "{}", match variable.ty {
-                Type::Int => ".int 0".to_string(),
-                Type::Char => ".byte 0".to_string(),
-                Type::Pointer(_) => ".long 0".to_string(),
-                Type::Array(ty, size) => format!(".ascii \"{}\"", "\\0".repeat(ty.get_size()).repeat(size)),
-            });
-        }
+        self.gen_global_var(&program.declarations);
 
         // 文字列リテラル
         // .rodataに配置
