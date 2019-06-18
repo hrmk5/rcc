@@ -415,15 +415,7 @@ impl Generator {
         for declaration in declarations {
             match declaration {
                 Declaration::GlobalVariable(variable, init_expr) => {
-                    // アラインメント
-                    // 配列は要素の型のサイズをアラインメントにする
-                    let align = match variable.ty {
-                        Type::Array(ref ty, _) => ty.get_size(),
-                        _ => variable.ty.get_size(),
-                    };
-                    add_mnemonic!(self, ".align {}", align);
                     add_label!(self, global!(variable.clone()));
-
 
                     // 初期値
                     match (variable.ty.clone(), init_expr.clone()) {
