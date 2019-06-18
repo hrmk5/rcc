@@ -18,6 +18,7 @@ int end(int arr[5]) {
 int global_var;
 int global_a = 10;
 int *global_b = &global_a;
+char *global_text = "Hello world";
 
 int main() {
     expect("zero", 0, 0);
@@ -95,6 +96,7 @@ int main() {
     expect("global_a = 10", 10, global_a);
     *global_b = 20;
     expect("global_b = &global_a", 20, global_a);
+    expect("global variable of string", 101, global_text[1]);
 
     char *text;
     text = "hello";

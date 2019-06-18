@@ -36,7 +36,7 @@ pub enum Infix {
 #[derive(Debug, Clone)]
 pub enum Literal {
     Number(i32),
-    String,
+    String(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -76,7 +76,7 @@ impl Expr {
     pub fn get_type(&self) -> Option<Type> {
         match self {
             Expr::Literal(Literal::Number(_)) => Some(Type::Int),
-            Expr::Literal(Literal::String) => Some(Type::Pointer(Box::new(Type::Char))),
+            Expr::Literal(Literal::String(_)) => Some(Type::Pointer(Box::new(Type::Char))),
             Expr::Variable(variable) => Some(variable.ty.clone()),
             Expr::Dereference(expr) => match expr.get_type() {
                 Some(Type::Pointer(box ty)) => Some(ty.clone()),
@@ -355,7 +355,7 @@ impl Parser {
             TokenKind::String(ref s) => {
                 self.pos += 1;
                 self.string_list.push(s.clone());
-                Expr::Literal(Literal::String)
+                Expr::Literal(Literal::String(self.string_list.len() - 1))
             },
             _ => {
                 self.add_error("数値でも開きカッコでもないトークンです");

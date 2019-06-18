@@ -3,7 +3,6 @@ use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration, Type, Vari
 pub struct Generator {
     pub code: String,
     label_num: u32,
-    string_count: u32,
 }
 
 const ARG_REGISTERS: [&str; 6] = ["r9", "r8", "rcx", "rdx", "rsi", "rdi"];
@@ -40,7 +39,6 @@ impl Generator {
         Generator {
             code: String::new(),
             label_num: 0,
-            string_count: 0,
         }
     }
 
@@ -148,10 +146,9 @@ impl Generator {
             Expr::Literal(Literal::Number(num)) => {
                 add_mnemonic!(self, "push {}", num);
             },
-            Expr::Literal(Literal::String) => {
-                add_mnemonic!(self, "lea rax, .Ltext{}[rip]", self.string_count);
+            Expr::Literal(Literal::String(num)) => {
+                add_mnemonic!(self, "lea rax, .Ltext{}[rip]", num);
                 add_mnemonic!(self, "push rax");
-                self.string_count += 1;
             },
             Expr::Variable(_) | Expr::Dereference(_) => {
                 let size = self.gen_lvalue(expr.clone());
@@ -437,7 +434,8 @@ impl Generator {
                         (Type::Pointer(_), None) => add_mnemonic!(self, ".long 0"),
                         (Type::Pointer(_), Some(Expr::Address(variable))) => add_mnemonic!(self, ".quad {}", global!(variable)),
                         // TODO: ポインタ演算
-                        // TODO: 文字列リテラル
+                        (Type::Array(box Type::Char, _), Some(Expr::Literal(Literal::String(num)))) |
+                        (Type::Pointer(box Type::Char), Some(Expr::Literal(Literal::String(num)))) => add_mnemonic!(self, ".quad .Ltext{}", num),
                         (Type::Array(ty, size), None) => add_mnemonic!(self, ".ascii \"{}\"", "\\0".repeat(ty.get_size()).repeat(size)),
                         _ => {},
                     };
@@ -451,8 +449,6 @@ impl Generator {
         self.code.push_str(".intel_syntax noprefix\n");
         self.code.push_str(".global main\n");
 
-        self.gen_global_var(&program.declarations);
-
         // 文字列リテラル
         // .rodataに配置
         self.code.push_str(".section .rodata\n");
@@ -460,6 +456,8 @@ impl Generator {
             add_label!(self, ".Ltext", i);
             add_mnemonic!(self, ".string \"{}\"", string);
         }
+
+        self.gen_global_var(&program.declarations);
 
         self.code.push_str(".text\n");
         for declaration in program.declarations {
