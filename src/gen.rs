@@ -366,10 +366,29 @@ impl Generator {
                 add_mnemonic!(self, "jmp .Lbegin{}", label_num);
                 add_label!(self, ".Lend", label_num);
             },
+            Stmt::Define(variable, init_expr) => {
+                // 初期化式
+                if let Some(init_expr) = init_expr {
+                    self.gen_expr(init_expr);
+                    add_mnemonic!(self, "pop rax");
+
+                    let size = match variable.ty {
+                        Type::Array(_, _) => 8,
+                        ty => ty.get_size(),
+                    };
+
+                    let register = self.get_size_register(size, "rax").unwrap();
+                    let size_str = self.get_size_str(size).unwrap();
+                    match variable.location {
+                        Location::Local(offset) => add_mnemonic!(self, "mov {} [rbp-{}], {}", size_str, offset, register),
+                        _ => panic!("ローカル変数ではありません"),
+                    };
+                }
+            },
             Stmt::Block(stmt_list) => {
                 for stmt in stmt_list {
                     let must_pop = match stmt {
-                        Stmt::Return(_) | Stmt::Define(_) => false,
+                        Stmt::Return(_) | Stmt::Define(_, _) => false,
                         _ => true,
                     };
 

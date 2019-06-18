@@ -134,7 +134,7 @@ pub enum Stmt {
     While(Expr, Box<Stmt>),
     For(Option<Expr>, Option<Expr>, Option<Expr>, Box<Stmt>),
     Block(Vec<Stmt>),
-    Define(Variable),
+    Define(Variable, Option<Expr>),
 }
 
 #[derive(Debug)]
@@ -554,8 +554,25 @@ impl Parser {
         // 変数定義
         let variable = self.expect_define(false);
         if let Some(variable) = variable {
+            // = があったら初期化式をパース
+            let init_expr = if self.consume(TokenKind::Assign) {
+                let start_pos = self.pos;
+                let expr = self.parse_expr();
+
+                // 型チェック
+                if let Some(ty) = expr.get_type() {
+                    if !ty.can_assign_to(&variable.ty) {
+                        self.add_error_range("\"{}\" は \"{}\" 型の変数を初期化できません", start_pos, self.pos - 1);
+                    }
+                }
+
+                Some(expr)
+            } else {
+                None
+            };
+
             expect!(self, TokenKind::Semicolon);
-            return Stmt::Define(variable);
+            return Stmt::Define(variable, init_expr);
         }
 
         let stmt = match self.tokens[self.pos].kind {
