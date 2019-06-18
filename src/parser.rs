@@ -2,7 +2,7 @@ use crate::tokenizer::{Token, TokenKind};
 use std::collections::HashMap;
 use std::convert::TryInto;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Int,
     Char,
@@ -17,6 +17,31 @@ impl Type {
             Type::Char => 1,
             Type::Pointer(_) => 8,
             Type::Array(ty, size) => ty.get_size() * size,
+        }
+    }
+
+    // selfはtyに代入できるかどうか
+    pub fn can_assign_to(&self, ty: &Self) -> bool {
+        match (ty, self) {
+            (Type::Pointer(box ty1), Type::Array(box ty2, _)) => ty1 == ty2,
+            (ty1, ty2) if ty1.is_number() && ty2.is_number() => true,
+            (ty1, ty2) => ty1 == ty2,
+        }
+    }
+
+    pub fn is_number(&self) -> bool {
+        match self {
+            Type::Int | Type::Char | Type::Pointer(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            Type::Int => "int".to_string(),
+            Type::Char => "char".to_string(),
+            Type::Pointer(ty) => format!("{}*", ty.to_string()),
+            Type::Array(ty, size) => format!("{}[{}]", ty.to_string(), size),
         }
     }
 }
@@ -192,15 +217,20 @@ impl Parser {
         }
     }
 
-    fn add_error_token(&mut self, msg: &str, pos: usize) {
-        let token = &self.tokens[pos];
+    fn add_error_range(&mut self, msg: &str, start_pos: usize, end_pos: usize) {
+        let start_token = &self.tokens[start_pos];
+        let end_token = &self.tokens[end_pos];
         self.errors.push(ParseError {
-            start_line: token.start_line,
-            start_col: token.start_col,
-            end_line: token.end_line,
-            end_col: token.end_col,
+            start_line: start_token.start_line,
+            start_col: start_token.start_col,
+            end_line: end_token.end_line,
+            end_col: end_token.end_col,
             message: String::from(msg),
         });
+    }
+
+    fn add_error_token(&mut self, msg: &str, pos: usize) {
+        self.add_error_range(msg, pos, pos);
     }
 
     fn add_error(&mut self, msg: &str) {
@@ -495,7 +525,22 @@ impl Parser {
     fn parse_assign(&mut self) -> Expr {
         let mut expr = self.parse_equality();
         if self.consume(TokenKind::Assign) {
-            expr = Expr::Assign(Box::new(expr), Box::new(self.parse_assign()));
+            let expr1_ty = expr.get_type();
+            let start_pos = self.pos;
+
+            let expr2 = self.parse_assign();
+            let expr2_ty = expr2.get_type();
+            expr = Expr::Assign(Box::new(expr), Box::new(expr2));
+
+            // 型チェック
+            match (expr1_ty, expr2_ty) {
+                (Some(ty1), Some(ty2)) => {
+                    if !ty2.can_assign_to(&ty1) {
+                        self.add_error_range(&format!("\"{}\" は \"{}\" に代入できません", ty1.to_string(), ty2.to_string()), start_pos, self.pos - 1);
+                    }
+                },
+                _ => {},
+            };
         }
 
         expr
@@ -649,6 +694,7 @@ impl Parser {
 
                     // = があったら初期化式をパース
                     let init_expr = if self.consume(TokenKind::Assign) {
+                        let start_pos = self.pos;
                         let expr = self.parse_add();
                         match expr {
                             Expr::Infix(Infix::Add, _, _) | Expr::Infix(Infix::Sub, _, _) | Expr::Literal(_) | Expr::Address(_) => {},
@@ -656,6 +702,15 @@ impl Parser {
                                 self.add_error("リテラルとポインタ演算式以外の式は使用できません");
                             },
                         };
+
+                        // 型チェック
+                        let init_expr_ty = expr.get_type();
+                        if let Some(init_expr_ty) = init_expr_ty {
+                            if !init_expr_ty.can_assign_to(&ty) {
+                                self.add_error_range(&format!("\"{}\" は \"{}\" に代入できません", init_expr_ty.to_string(), ty.to_string()), start_pos, self.pos - 1);
+                            }
+                        }
+
                         Some(expr)
                     } else {
                         None
