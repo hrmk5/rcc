@@ -94,6 +94,7 @@ pub enum Expr {
     Assign(Box<Expr>, Box<Expr>),
     Infix(Infix, Box<Expr>,  Box<Expr>),
     Call(String, Type, Vec<Expr>),
+    Initializer(Vec<Expr>),
     Invalid,
 }
 
@@ -121,7 +122,7 @@ impl Expr {
             },
             Expr::Infix(_, _, _) => Some(Type::Int),
             Expr::Call(_, ty, _) => Some(ty.clone()),
-            Expr::Invalid => None,
+            Expr::Invalid | Expr::Initializer(_) => None,
         }
     }
 }
@@ -540,7 +541,7 @@ impl Parser {
                     }
                 },
                 _ => {},
-            };
+            }
         }
 
         expr
@@ -550,23 +551,56 @@ impl Parser {
         self.parse_assign()
     }
 
+    fn parse_initializer(&mut self) -> Expr {
+        // { を消費
+        self.consume(TokenKind::Lbrace);
+
+        let expr_list: Vec<Expr> = if self.consume(TokenKind::Rbrace) {
+            Vec::new()
+        } else {
+            let mut expr_list = Vec::new();
+            loop {
+                let expr = self.parse_expr();
+
+                expr_list.push(expr);
+
+                if self.consume(TokenKind::Rbrace) {
+                    break;
+                } else if self.consume(TokenKind::EOF) {
+                    self.add_error("{ に対応する } がありません");
+                    break;
+                }
+
+                expect!(self, TokenKind::Comma);
+            }
+            expr_list
+        };
+
+        Expr::Initializer(expr_list)
+    }
+
     fn parse_stmt(&mut self) -> Stmt {
         // 変数定義
         let variable = self.expect_define(false);
         if let Some(variable) = variable {
             // = があったら初期化式をパース
             let init_expr = if self.consume(TokenKind::Assign) {
-                let start_pos = self.pos;
-                let expr = self.parse_expr();
+                // { があったら初期化リストとしてパース
+                if let TokenKind::Lbrace = self.tokens[self.pos].kind {
+                    Some(self.parse_initializer())
+                } else {
+                    let start_pos = self.pos;
+                    let expr = self.parse_expr();
 
-                // 型チェック
-                if let Some(ty) = expr.get_type() {
-                    if !ty.can_assign_to(&variable.ty) {
-                        self.add_error_range("\"{}\" は \"{}\" 型の変数を初期化できません", start_pos, self.pos - 1);
+                    // 型チェック
+                    if let Some(ty) = expr.get_type() {
+                        if !ty.can_assign_to(&variable.ty) {
+                            self.add_error_range("\"{}\" は \"{}\" 型の変数を初期化できません", start_pos, self.pos - 1);
+                        }
                     }
-                }
 
-                Some(expr)
+                    Some(expr)
+                }
             } else {
                 None
             };

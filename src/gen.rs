@@ -367,21 +367,28 @@ impl Generator {
                 add_label!(self, ".Lend", label_num);
             },
             Stmt::Define(variable, init_expr) => {
+                let offset = match variable.location {
+                    Location::Local(offset) => offset,
+                    _ => panic!("ローカル変数ではありません"),
+                };
+
                 // 初期化式
                 if let Some(init_expr) = init_expr {
-                    self.gen_expr(init_expr);
-                    add_mnemonic!(self, "pop rax");
+                    match init_expr {
+                        Expr::Initializer(_) => self.gen_initalizer(offset, &variable.ty, init_expr),
+                        expr => {
+                            self.gen_expr(expr);
+                            add_mnemonic!(self, "pop rax");
 
-                    let size = match variable.ty {
-                        Type::Array(_, _) => 8,
-                        ty => ty.get_size(),
-                    };
+                            let size = match variable.ty {
+                                Type::Array(_, _) => 8,
+                                ty => ty.get_size(),
+                            };
 
-                    let register = self.get_size_register(size, "rax").unwrap();
-                    let size_str = self.get_size_str(size).unwrap();
-                    match variable.location {
-                        Location::Local(offset) => add_mnemonic!(self, "mov {} [rbp-{}], {}", size_str, offset, register),
-                        _ => panic!("ローカル変数ではありません"),
+                            let register = self.get_size_register(size, "rax").unwrap();
+                            let size_str = self.get_size_str(size).unwrap();
+                            add_mnemonic!(self, "mov {} [rbp-{}], {}", size_str, offset, register);
+                        }
                     };
                 }
             },
@@ -401,6 +408,36 @@ impl Generator {
             },
             _ => {},
         }
+    }
+
+    fn gen_initalizer(&mut self, offset: usize, ty: &Type, expr: Expr) {
+        let (element_type, _) = match ty {
+            Type::Array(ty, size) => (ty.clone(), size),
+            _ => panic!("配列ではありません"),
+        };
+
+        match expr {
+            Expr::Initializer(expr_list) => {
+                let mut i = 0;
+                if let Type::Array(_, _) = *element_type.clone() {
+                    for expr in expr_list {
+                        let element_offset = offset - i * ty.get_size();
+                        self.gen_initalizer(element_offset, &element_type, expr);
+                        i += 1;
+                    }
+                } else {
+                    for expr in expr_list {
+                        self.gen_expr(expr);
+                        let element_offset = offset - i * element_type.get_size();
+                        let register = self.get_size_register(element_type.get_size(), "rax").unwrap();
+                        add_mnemonic!(self, "pop rax");
+                        add_mnemonic!(self, "mov [rbp-{}], {}", element_offset, register);
+                        i += 1;
+                    }
+                }
+            },
+            _ => panic!("gen_initializer"),
+        };
     }
 
     pub fn gen_declaration(&mut self, declaration: Declaration) {
