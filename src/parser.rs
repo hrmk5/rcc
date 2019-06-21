@@ -560,7 +560,11 @@ impl Parser {
         } else {
             let mut expr_list = Vec::new();
             loop {
-                let expr = self.parse_expr();
+                let expr = if let TokenKind::Lbrace = self.tokens[self.pos].kind {
+                    self.parse_initializer()
+                } else {
+                    self.parse_expr()
+                };
 
                 expr_list.push(expr);
 
