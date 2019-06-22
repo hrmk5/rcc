@@ -477,23 +477,55 @@ impl Generator {
                     add_label!(self, global!(variable.clone()));
 
                     // 初期値
-                    match (variable.ty.clone(), init_expr.clone()) {
-                        (Type::Int, Some(Expr::Literal(Literal::Number(num)))) => add_mnemonic!(self, ".int {}", num),
-                        (Type::Int, None) => add_mnemonic!(self, ".int 0"),
-                        (Type::Char, Some(Expr::Literal(Literal::Number(num)))) => add_mnemonic!(self, ".byte {}", num),
-                        (Type::Char, None) => add_mnemonic!(self, ".byte 0"),
-                        (Type::Pointer(_), None) => add_mnemonic!(self, ".long 0"),
-                        (Type::Pointer(_), Some(Expr::Address(variable))) => add_mnemonic!(self, ".quad {}", global!(variable)),
-                        // TODO: ポインタ演算
-                        (Type::Array(box Type::Char, _), Some(Expr::Literal(Literal::String(num)))) |
-                        (Type::Pointer(box Type::Char), Some(Expr::Literal(Literal::String(num)))) => add_mnemonic!(self, ".quad .Ltext{}", num),
-                        (Type::Array(ty, size), None) => add_mnemonic!(self, ".ascii \"{}\"", "\\0".repeat(ty.get_size()).repeat(size)),
-                        _ => {},
-                    };
+                    self.gen_global_init_expr(&variable.ty, init_expr.clone());
                 },
                 _ => {},
             };
         }
+    }
+
+    fn gen_global_init_expr(&mut self, ty: &Type, init_expr: Option<Expr>) {
+        match (ty.clone(), init_expr.clone()) {
+            (Type::Int, Some(Expr::Literal(Literal::Number(num)))) => add_mnemonic!(self, ".int {}", num),
+            (Type::Int, None) => add_mnemonic!(self, ".int 0"),
+            (Type::Char, Some(Expr::Literal(Literal::Number(num)))) => add_mnemonic!(self, ".byte {}", num),
+            (Type::Char, None) => add_mnemonic!(self, ".byte 0"),
+            (Type::Pointer(_), None) => add_mnemonic!(self, ".long 0"),
+            (Type::Pointer(_), Some(Expr::Address(variable))) => add_mnemonic!(self, ".quad {}", global!(variable)),
+            // TODO: ポインタ演算
+            (Type::Array(box Type::Char, _), Some(Expr::Literal(Literal::String(num)))) |
+                (Type::Pointer(box Type::Char), Some(Expr::Literal(Literal::String(num)))) => add_mnemonic!(self, ".quad .Ltext{}", num),
+            (Type::Array(_, _), Some(Expr::Initializer(_))) => self.gen_global_initializer(&ty, init_expr.unwrap()),
+            (Type::Array(ty, size), None) => add_mnemonic!(self, ".ascii \"{}\"", "\\0".repeat(ty.get_size()).repeat(size)),
+            _ => {},
+        };
+    }
+
+    fn gen_global_initializer(&mut self, ty: &Type, expr: Expr) {
+        let (element_type, size) = match ty {
+            Type::Array(ty, size) => (ty.clone(), size),
+            _ => panic!("配列ではありません"),
+        };
+
+        match expr {
+            Expr::Initializer(expr_list) => {
+                let mut i = 0;
+                for expr in expr_list {
+                    if let Expr::Initializer(_) = expr {
+                        self.gen_global_initializer(&element_type, expr);
+                    } else {
+                        self.gen_global_init_expr(&element_type, Some(expr));
+                    }
+                    i += 1;
+                }
+
+                let padding = (size - i) * element_type.get_size();
+                if padding > 0 {
+                    add_mnemonic!(self, ".zero {}", padding);
+                }
+            },
+            _ => panic!("gen_global_initializer"),
+        };
     }
 
     pub fn gen(&mut self, program: Program) {

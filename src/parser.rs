@@ -753,24 +753,29 @@ impl Parser {
 
                     // = があったら初期化式をパース
                     let init_expr = if self.consume(TokenKind::Assign) {
-                        let start_pos = self.pos;
-                        let expr = self.parse_add();
-                        match expr {
-                            Expr::Infix(Infix::Add, _, _) | Expr::Infix(Infix::Sub, _, _) | Expr::Literal(_) | Expr::Address(_) => {},
-                            _ => {
-                                self.add_error("リテラルとポインタ演算式以外の式は使用できません");
-                            },
-                        };
+                        // { があったら初期化リストとしてパース
+                        if let TokenKind::Lbrace = self.tokens[self.pos].kind {
+                            Some(self.parse_initializer())
+                        } else {
+                            let start_pos = self.pos;
+                            let expr = self.parse_add();
+                            match expr {
+                                Expr::Infix(Infix::Add, _, _) | Expr::Infix(Infix::Sub, _, _) | Expr::Literal(_) | Expr::Address(_) => {},
+                                _ => {
+                                    self.add_error("リテラルとポインタ演算式以外の式は使用できません");
+                                },
+                            };
 
-                        // 型チェック
-                        let init_expr_ty = expr.get_type();
-                        if let Some(init_expr_ty) = init_expr_ty {
-                            if !init_expr_ty.can_assign_to(&ty) {
-                                self.add_error_range(&format!("\"{}\" は \"{}\" に代入できません", init_expr_ty.to_string(), ty.to_string()), start_pos, self.pos - 1);
+                            // 型チェック
+                            let init_expr_ty = expr.get_type();
+                            if let Some(init_expr_ty) = init_expr_ty {
+                                if !init_expr_ty.can_assign_to(&ty) {
+                                    self.add_error_range(&format!("\"{}\" は \"{}\" に代入できません", init_expr_ty.to_string(), ty.to_string()), start_pos, self.pos - 1);
+                                }
                             }
-                        }
 
-                        Some(expr)
+                            Some(expr)
+                        }
                     } else {
                         None
                     };

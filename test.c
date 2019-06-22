@@ -22,6 +22,11 @@ int global_var;
 int global_a = 10;
 int *global_b = &global_a;
 char *global_text = "Hello world";
+int global_arr[3] = { 50, 41, 95 };
+int global_arr2[3][3] = {
+    { 6, 3 },
+    { 9, 10, 32 }
+};
 
 int main() {
     expect("zero", 0, 0);
@@ -108,6 +113,8 @@ int main() {
     *global_b = 20;
     expect("global_b = &global_a", 20, global_a);
     expect("global variable of string", 101, global_text[1]);
+    expect("global variable with initializer list", 95, global_arr[2]);
+    expect("global variable with initializer list 2", 32, global_arr2[1][2]);
 
     char *text;
     text = "hello";
