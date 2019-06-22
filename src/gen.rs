@@ -1,4 +1,4 @@
-use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration, Type, Variable, Location};
+use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration, Type, Location};
 
 pub struct Generator {
     pub code: String,
@@ -109,6 +109,7 @@ impl Generator {
                 self.gen_dereference(*expr);
                 add_mnemonic!(self, "push rax");
                 Some(match ty {
+                    Some(Type::Pointer(box Type::Array(_, _))) => 8,
                     Some(Type::Pointer(ty)) => ty.get_size(),
                     _ => panic!("ポインタではない値を参照外ししています"),
                 })
@@ -151,6 +152,7 @@ impl Generator {
                 add_mnemonic!(self, "push rax");
             },
             Expr::Variable(_) | Expr::Dereference(_) => {
+                let ty = expr.get_type().unwrap();
                 let size = self.gen_lvalue(expr.clone());
 
                 if let Some(size) = size {
@@ -161,9 +163,9 @@ impl Generator {
                         _ => "mov",
                     };
 
-                    match expr {
+                    match ty {
                         // 配列型だったらメモリアクセスせずにアドレスを返す
-                        Expr::Variable(Variable { ty: Type::Array(_, _), .. }) => {},
+                        Type::Array(_, _) => {},
                         _ => {
                             add_mnemonic!(self, "pop rax");
                             add_mnemonic!(self, "{} {}, {} [rax]", mov, register, size_str);
@@ -419,21 +421,22 @@ impl Generator {
         match expr {
             Expr::Initializer(expr_list) => {
                 let mut i = 0;
-                if let Type::Array(_, _) = *element_type.clone() {
-                    for expr in expr_list {
-                        let element_offset = offset - i * ty.get_size();
-                        self.gen_initalizer(element_offset, &element_type, expr);
-                        i += 1;
-                    }
-                } else {
-                    for expr in expr_list {
-                        self.gen_expr(expr);
-                        let element_offset = offset - i * element_type.get_size();
-                        let register = self.get_size_register(element_type.get_size(), "rax").unwrap();
-                        add_mnemonic!(self, "pop rax");
-                        add_mnemonic!(self, "mov [rbp-{}], {}", element_offset, register);
-                        i += 1;
-                    }
+                for expr in expr_list {
+                    let element_offset = offset - i * element_type.get_size();
+
+                    match expr {
+                        Expr::Initializer(_) => {
+                            self.gen_initalizer(element_offset, &element_type, expr);
+                        },
+                        _ => {
+                            self.gen_expr(expr);
+                            let register = self.get_size_register(element_type.get_size(), "rax").unwrap();
+                            add_mnemonic!(self, "pop rax");
+                            add_mnemonic!(self, "mov [rbp-{}], {}", element_offset, register);
+                        },
+                    };
+
+                    i += 1;
                 }
             },
             _ => panic!("gen_initializer"),

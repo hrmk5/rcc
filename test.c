@@ -81,6 +81,14 @@ int main() {
     arr[1] = 7;
     arr[4] = 10;
     expect("array", 4, arr[0]);
+    int arr3[3][3] = { 
+        { 3, 5, 1 },
+        { 5, 10, 41 },
+        { 93, 2, 65 }
+    };
+    arr3[2][1] = 50;
+    expect("two-dimentional array", 91, arr3[1][2] + arr3[2][1]);
+
     expect("pointer calculation", 7, *(arr + 1));
 
     expect("call", 45, plus(10, 35));

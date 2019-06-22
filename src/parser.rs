@@ -282,7 +282,7 @@ impl Parser {
         match ident {
             Some(ident) => {
                 let mut ty = ty;
-                if let Some(num) = self.expect_subscript() {
+                while let Some(num) = self.expect_subscript() {
                     ty = Type::Array(Box::new(ty), num);
                 }
 
@@ -396,16 +396,20 @@ impl Parser {
     }
 
     fn parse_postfix(&mut self) -> Expr {
-        let expr = self.parse_term();
-        if self.consume(TokenKind::Lbracket) {
-            // 配列の添字
-            let index = self.parse_expr();
-            let expr = Expr::Dereference(Box::new(Expr::Infix(Infix::Add, Box::new(expr), Box::new(index))));
-            expect!(self, TokenKind::Rbracket);
-            expr
-        } else {
-            expr
+        let mut expr = self.parse_term();
+
+        // 添字演算子
+        loop {
+            if self.consume(TokenKind::Lbracket) {
+                let index = self.parse_expr();
+                expr = Expr::Dereference(Box::new(Expr::Infix(Infix::Add, Box::new(expr), Box::new(index))));
+                expect!(self, TokenKind::Rbracket);
+            } else {
+                break;
+            }
         }
+
+        expr
     }
 
     fn parse_unary(&mut self) -> Expr {
@@ -743,7 +747,7 @@ impl Parser {
 
                     // 添字演算子があったら配列型にする
                     let mut ty = ty;
-                    if let Some(size) = self.expect_subscript() {
+                    while let Some(size) = self.expect_subscript() {
                         ty = Type::Array(Box::new(ty), size);
                     }
 
