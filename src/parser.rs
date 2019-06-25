@@ -19,31 +19,6 @@ impl Type {
             Type::Array(ty, size) => ty.get_size() * size,
         }
     }
-
-    // selfはtyに代入できるかどうか
-    pub fn can_assign_to(&self, ty: &Self) -> bool {
-        match (ty, self) {
-            (Type::Pointer(box ty1), Type::Array(box ty2, _)) => ty1 == ty2,
-            (ty1, ty2) if ty1.is_number() && ty2.is_number() => true,
-            (ty1, ty2) => ty1 == ty2,
-        }
-    }
-
-    pub fn is_number(&self) -> bool {
-        match self {
-            Type::Int | Type::Char | Type::Pointer(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn to_string(&self) -> String {
-        match self {
-            Type::Int => "int".to_string(),
-            Type::Char => "char".to_string(),
-            Type::Pointer(ty) => format!("{}*", ty.to_string()),
-            Type::Array(ty, size) => format!("{}[{}]", ty.to_string(), size),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -243,9 +218,14 @@ impl Parser {
         Expr::Invalid
     }
 
+    fn get_token(&mut self) -> TokenKind {
+        self.tokens[self.pos].kind.clone()
+    }
+
     fn get_token_and_next(&mut self) -> TokenKind {
+        let kind = self.get_token();
         self.pos += 1;
-        self.tokens[self.pos - 1].kind.clone()
+        kind
     }
 
     fn expect_ident(&mut self) -> Option<String> {
@@ -368,7 +348,6 @@ impl Parser {
                     expect!(self, TokenKind::Comma);
                 }
 
-                // TODO: 引数の型チェック
                 return match self.functions.get(&ident) {
                     Some(func) => Expr::Call(ident, func.return_type.clone(), args),
                     None => Expr::Call(ident, Type::Int, args),
@@ -522,22 +501,7 @@ impl Parser {
     fn parse_assign(&mut self) -> Expr {
         let mut expr = self.parse_equality();
         if self.consume(TokenKind::Assign) {
-            let expr1_ty = expr.get_type();
-            let start_pos = self.pos;
-
-            let expr2 = self.parse_assign();
-            let expr2_ty = expr2.get_type();
-            expr = Expr::Assign(Box::new(expr), Box::new(expr2));
-
-            // 型チェック
-            match (expr1_ty, expr2_ty) {
-                (Some(ty1), Some(ty2)) => {
-                    if !ty2.can_assign_to(&ty1) {
-                        self.add_error_range(&format!("\"{}\" は \"{}\" に代入できません", ty1.to_string(), ty2.to_string()), start_pos, self.pos - 1);
-                    }
-                },
-                _ => {},
-            }
+            expr = Expr::Assign(Box::new(expr), Box::new(self.parse_assign()));
         }
 
         expr
@@ -661,20 +625,9 @@ impl Parser {
             // = があったら初期化式をパース
             let init_expr = if self.consume(TokenKind::Assign) {
                 // { があったら初期化リストとしてパース
-                if let TokenKind::Lbrace = self.tokens[self.pos].kind {
-                    Some(self.parse_initializer())
-                } else {
-                    let start_pos = self.pos;
-                    let expr = self.parse_expr();
-
-                    // 型チェック
-                    if let Some(ty) = expr.get_type() {
-                        if !ty.can_assign_to(&variable.ty) {
-                            self.add_error_range("\"{}\" は \"{}\" 型の変数を初期化できません", start_pos, self.pos - 1);
-                        }
-                    }
-
-                    Some(expr)
+                match self.get_token() {
+                    TokenKind::Lbrace => Some(self.parse_initializer()),
+                    _ => Some(self.parse_expr()),
                 }
             } else {
                 None
@@ -749,27 +702,9 @@ impl Parser {
                     // = があったら初期化式をパース
                     let init_expr = if self.consume(TokenKind::Assign) {
                         // { があったら初期化リストとしてパース
-                        if let TokenKind::Lbrace = self.tokens[self.pos].kind {
-                            Some(self.parse_initializer())
-                        } else {
-                            let start_pos = self.pos;
-                            let expr = self.parse_add();
-                            match expr {
-                                Expr::Infix(Infix::Add, _, _) | Expr::Infix(Infix::Sub, _, _) | Expr::Literal(_) | Expr::Address(_) => {},
-                                _ => {
-                                    self.add_error("リテラルとポインタ演算式以外の式は使用できません");
-                                },
-                            };
-
-                            // 型チェック
-                            let init_expr_ty = expr.get_type();
-                            if let Some(init_expr_ty) = init_expr_ty {
-                                if !init_expr_ty.can_assign_to(&ty) {
-                                    self.add_error_range(&format!("\"{}\" は \"{}\" に代入できません", init_expr_ty.to_string(), ty.to_string()), start_pos, self.pos - 1);
-                                }
-                            }
-
-                            Some(expr)
+                        match self.get_token() {
+                            TokenKind::Lbrace => Some(self.parse_initializer()),
+                            _ => Some(self.parse_add()),
                         }
                     } else {
                         None
