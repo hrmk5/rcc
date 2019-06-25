@@ -238,6 +238,16 @@ impl Parser {
         self.add_error_token(msg, self.pos);
     }
 
+    fn invalid_expr(&mut self, msg: &str, offset: i32) -> Expr {
+        self.add_error_token(msg, (self.pos as i32 + offset) as usize);
+        Expr::Invalid
+    }
+
+    fn get_token_and_next(&mut self) -> TokenKind {
+        self.pos += 1;
+        self.tokens[self.pos - 1].kind.clone()
+    }
+
     fn expect_ident(&mut self) -> Option<String> {
         match self.tokens[self.pos].kind {
             TokenKind::Ident(ref ident) => {
@@ -335,6 +345,11 @@ impl Parser {
         Some(self.parse_pointer(ty))
     }
 
+    fn parse_string(&mut self, s: String) -> Expr {
+        self.string_list.push(s);
+        Expr::Literal(Literal::String(self.string_list.len() - 1))
+    }
+
     fn parse_term(&mut self) -> Expr {
         let ident = self.expect_ident();
         if let Some(ident) = ident {
@@ -362,36 +377,20 @@ impl Parser {
                 // 変数
                 return match (self.variables.get(&ident), self.global_variables.get(&ident)) {
                     (Some(variable), _) | (_, Some(variable)) => Expr::Variable(variable.clone()),
-                    _ => {
-                        self.add_error_token(&format!("変数 \"{}\" が見つかりません", ident), self.pos - 1);
-                        Expr::Invalid
-                    },
+                    _ => self.invalid_expr(&format!("変数 \"{}\" が見つかりません", ident), -1),
                 };
             }
         }
 
-        match self.tokens[self.pos].kind {
+        match self.get_token_and_next() {
             TokenKind::Lparen => {
-                self.pos += 1;
                 let expr = self.parse_expr();
-                if !self.consume(TokenKind::Rparen) {
-                    self.add_error("開きカッコに対応する閉じカッコがありません");
-                }
+                expect!(self, TokenKind::Rparen);
                 expr
             },
-            TokenKind::Number(num) => {
-                self.pos += 1;
-                Expr::Literal(Literal::Number(num))
-            },
-            TokenKind::String(ref s) => {
-                self.pos += 1;
-                self.string_list.push(s.clone());
-                Expr::Literal(Literal::String(self.string_list.len() - 1))
-            },
-            _ => {
-                self.add_error("数値でも開きカッコでもないトークンです");
-                Expr::Invalid
-            },
+            TokenKind::Number(num) => Expr::Literal(Literal::Number(num)),
+            TokenKind::String(s) => self.parse_string(s),
+            _ => self.invalid_expr("数値でも開きカッコでもないトークンです", 0),
         }
     }
 
@@ -412,56 +411,49 @@ impl Parser {
         expr
     }
 
+    fn parse_unary_minus(&mut self) -> Expr {
+        // 0 - n にする
+        Expr::Infix(Infix::Sub, Box::new(Expr::Literal(Literal::Number(0))), Box::new(self.parse_postfix()))
+    }
+
+    fn parse_unary_sizeof(&mut self) -> Expr {
+        let expr = self.parse_unary();
+        let ty = expr.get_type();
+        match ty {
+            Some(ty) => Expr::Literal(Literal::Number(ty.get_size() as i32)),
+            None => self.invalid_expr("型を識別できませんでした", 0),
+        }
+    }
+
+    fn parse_unary_deref(&mut self) -> Expr {
+        let expr = self.parse_unary();
+        match expr.get_type() {
+            Some(Type::Pointer(_)) => Expr::Dereference(Box::new(expr)),
+            _ => self.invalid_expr("ポインタではない値を参照外しすることはできません", 0),
+        }
+    }
+
+    fn parse_unary_address(&mut self) -> Expr {
+        let ident = self.expect_ident();
+        if let Some(ident) = ident {
+            match (self.variables.get(&ident), self.global_variables.get(&ident)) {
+                (Some(variable), _) | (_, Some(variable)) => Expr::Address(variable.clone()),
+                _ => self.invalid_expr(&format!("変数 \"{}\" が見つかりません", ident), -1),
+            }
+        } else {
+            self.invalid_expr("変数ではありません", 0)
+        }
+    }
+
     fn parse_unary(&mut self) -> Expr {
-        match self.tokens[self.pos].kind {
-            TokenKind::Add => {
-                self.pos += 1;
-                self.parse_postfix()
-            },
-            TokenKind::Sub => {
-                self.pos += 1;
-                Expr::Infix(Infix::Sub, Box::new(Expr::Literal(Literal::Number(0))), Box::new(self.parse_postfix()))
-            },
-            TokenKind::SizeOf => {
-                self.pos += 1;
-                let expr = self.parse_unary();
-                let ty = expr.get_type();
-                match ty {
-                    Some(ty) => Expr::Literal(Literal::Number(ty.get_size() as i32)),
-                    None => {
-                        self.add_error("型を識別できませんでした");
-                        Expr::Invalid
-                    },
-                }
-            },
-            TokenKind::Asterisk => {
-                self.pos += 1;
-                let expr = self.parse_unary();
-                match expr.get_type() {
-                    Some(Type::Pointer(_)) => Expr::Dereference(Box::new(expr)),
-                    _ => {
-                        self.add_error("ポインタではない値を参照外しすることはできません");
-                        Expr::Invalid
-                    }
-                }
-            },
-            TokenKind::Ampersand => {
-                self.pos += 1;
-                let ident = self.expect_ident();
-                if let Some(ident) = ident {
-                    match (self.variables.get(&ident), self.global_variables.get(&ident)) {
-                        (Some(variable), _) | (_, Some(variable)) => Expr::Address(variable.clone()),
-                        _ => {
-                            self.add_error_token(&format!("変数 \"{}\" が見つかりません", ident), self.pos - 1);
-                            Expr::Invalid
-                        },
-                    }
-                } else {
-                    self.add_error("変数ではありません");
-                    Expr::Invalid
-                }
-            },
+        match self.get_token_and_next() {
+            TokenKind::Add => self.parse_postfix(),
+            TokenKind::Sub => self.parse_unary_minus(),
+            TokenKind::SizeOf => self.parse_unary_sizeof(),
+            TokenKind::Asterisk => self.parse_unary_deref(),
+            TokenKind::Ampersand => self.parse_unary_address(),
             _ => {
+                self.pos -= 1;
                 self.parse_postfix()
             }
         }
@@ -587,6 +579,81 @@ impl Parser {
         Expr::Initializer(expr_list)
     }
 
+    fn parse_return_stmt(&mut self) -> Stmt {
+        let stmt = Stmt::Return(self.parse_expr());
+        expect!(self, TokenKind::Semicolon);
+        stmt
+    }
+
+    fn parse_if_stmt(&mut self) -> Stmt {
+        expect!(self, TokenKind::Lparen);
+
+        let expr = self.parse_expr();
+        if !self.consume(TokenKind::Rparen) {
+            self.add_error("開きカッコに対応する閉じカッコがありません");
+        }
+
+        let if_stmt = Box::new(self.parse_stmt());
+        let else_stmt = if self.consume(TokenKind::Else) { Some(Box::new(self.parse_stmt())) } else { None };
+        Stmt::If(expr, if_stmt, else_stmt)
+    }
+
+    fn parse_while_stmt(&mut self) -> Stmt {
+        expect!(self, TokenKind::Lparen);
+
+        let expr = self.parse_expr();
+        if !self.consume(TokenKind::Rparen) {
+            self.add_error("開きカッコに対応する閉じカッコがありません");
+        }
+
+        Stmt::While(expr, Box::new(self.parse_stmt()))
+    }
+
+    fn parse_for_stmt(&mut self) -> Stmt {
+        expect!(self, TokenKind::Lparen);
+
+        let mut parse_expr_in_for = |is_last: bool| -> Option<Expr> {
+            if self.consume(TokenKind::Semicolon) { 
+                None
+            } else {
+                let expr = self.parse_expr();
+
+                expect!(self, if !is_last { TokenKind::Semicolon } else { TokenKind::Rparen });
+
+                Some(expr)
+            }
+        };
+
+        let expr1 = parse_expr_in_for(false);
+        let expr2 = parse_expr_in_for(false);
+        let expr3  = parse_expr_in_for(true);
+
+        Stmt::For(expr1, expr2, expr3, Box::new(self.parse_stmt()))
+    }
+
+    fn parse_block_stmt(&mut self) -> Stmt {
+        let mut stmt_list = Vec::<Stmt>::new();
+        loop {
+            if self.consume(TokenKind::Rbrace) {
+                break;
+            } else if self.consume(TokenKind::EOF) {
+                self.pos -= 1;
+                self.add_error("'{' に対応する '}' がありません");
+                break;
+            }
+
+            stmt_list.push(self.parse_stmt());
+        }
+
+        Stmt::Block(stmt_list)
+    }
+
+    fn parse_expr_stmt(&mut self) -> Stmt {
+        let stmt = Stmt::Expr(self.parse_expr());
+        expect!(self, TokenKind::Semicolon);
+        stmt
+    }
+
     fn parse_stmt(&mut self) -> Stmt {
         // 変数定義
         let variable = self.expect_define(false);
@@ -617,89 +684,17 @@ impl Parser {
             return Stmt::Define(variable, init_expr);
         }
 
-        let stmt = match self.tokens[self.pos].kind {
-            TokenKind::Return => {
-                self.pos += 1;
-                let stmt = Stmt::Return(self.parse_expr());
-
-                expect!(self, TokenKind::Semicolon);
-
-                stmt
-            },
-            TokenKind::If => {
-                self.pos += 1;
-
-                expect!(self, TokenKind::Lparen);
-
-                let expr = self.parse_expr();
-                if !self.consume(TokenKind::Rparen) {
-                    self.add_error("開きカッコに対応する閉じカッコがありません");
-                }
-
-                let if_stmt = Box::new(self.parse_stmt());
-                let else_stmt = if self.consume(TokenKind::Else) { Some(Box::new(self.parse_stmt())) } else { None };
-                Stmt::If(expr, if_stmt, else_stmt)
-            },
-            TokenKind::While => {
-                self.pos += 1;
-
-                expect!(self, TokenKind::Lparen);
-
-                let expr = self.parse_expr();
-                if !self.consume(TokenKind::Rparen) {
-                    self.add_error("開きカッコに対応する閉じカッコがありません");
-                }
-
-                Stmt::While(expr, Box::new(self.parse_stmt()))
-            },
-            TokenKind::For => {
-                self.pos += 1;
-                expect!(self, TokenKind::Lparen);
-
-                let mut parse_expr_in_for = |is_last: bool| -> Option<Expr> {
-                    if self.consume(TokenKind::Semicolon) { 
-                        None
-                    } else {
-                        let expr = self.parse_expr();
-
-                        expect!(self, if !is_last { TokenKind::Semicolon } else { TokenKind::Rparen });
-
-                        Some(expr)
-                    }
-                };
-
-                let expr1 = parse_expr_in_for(false);
-                let expr2 = parse_expr_in_for(false);
-                let expr3  = parse_expr_in_for(true);
-
-                Stmt::For(expr1, expr2, expr3, Box::new(self.parse_stmt()))
-            },
-            TokenKind::Lbrace => {
-                self.pos += 1;
-                let mut stmt_list = Vec::<Stmt>::new();
-                loop {
-                    if self.consume(TokenKind::Rbrace) {
-                        break;
-                    } else if self.consume(TokenKind::EOF) {
-                        self.pos -= 1;
-                        self.add_error("'{' に対応する '}' がありません");
-                        break;
-                    }
-
-                    stmt_list.push(self.parse_stmt());
-                }
-
-                Stmt::Block(stmt_list)
-            },
+        match self.get_token_and_next() {
+            TokenKind::Return => self.parse_return_stmt(),
+            TokenKind::If => self.parse_if_stmt(),
+            TokenKind::While => self.parse_while_stmt(),
+            TokenKind::For => self.parse_for_stmt(),
+            TokenKind::Lbrace => self.parse_block_stmt(),
             _ => {
-                let stmt = Stmt::Expr(self.parse_expr());
-                expect!(self, TokenKind::Semicolon);
-                stmt
-            },
-        };
-
-
-        stmt
+                self.pos -= 1;
+                self.parse_expr_stmt()
+            }
+        }
     }
 
     pub fn parse_declaration(&mut self) -> Option<Declaration> {
