@@ -330,35 +330,51 @@ impl Parser {
         Expr::Literal(Literal::String(self.string_list.len() - 1))
     }
 
+    fn parse_call(&mut self, ident: String) -> Expr {
+        // 引数をパース
+        let mut args = Vec::<Expr>::new();
+        loop {
+            args.push(self.parse_expr());
+            if self.consume(TokenKind::Rparen) {
+                break;
+            } else if self.consume(TokenKind::EOF) {
+                self.add_error("開きカッコに対応する閉じカッコがありません");
+                break;
+            }
+
+            expect!(self, TokenKind::Comma);
+        }
+
+        match self.functions.get(&ident) {
+            Some(func) => Expr::Call(ident, func.return_type.clone(), args),
+            // 関数が見つからなかったら戻り値の型をintとする
+            None => Expr::Call(ident, Type::Int, args),
+        }
+    }
+
+    fn parse_var(&mut self, ident: String) -> Expr {
+        // 変数マップから探す
+        match (self.variables.get(&ident), self.global_variables.get(&ident)) {
+            (Some(variable), _) | (_, Some(variable)) => Expr::Variable(variable.clone()),
+            _ => self.invalid_expr(&format!("変数 \"{}\" が見つかりません", ident), -1),
+        }
+    }
+
+    fn parse_var_or_call(&mut self, ident: String) -> Expr {
+        if self.consume(TokenKind::Lparen) {
+            // 識別子の直後のトークンが開きカッコだったら関数呼び出としてパースする
+            self.parse_call(ident)
+        } else {
+            // 開きカッコではなかったら変数
+            self.parse_var(ident)
+        }
+    }
+
     fn parse_term(&mut self) -> Expr {
+        // 現在のトークンが識別子だったら変数か関数呼び出しとしてパースする
         let ident = self.expect_ident();
         if let Some(ident) = ident {
-            if self.consume(TokenKind::Lparen) {
-                // 関数呼び出し
-                let mut args = Vec::<Expr>::new();
-                loop {
-                    args.push(self.parse_expr());
-                    if self.consume(TokenKind::Rparen) {
-                        break;
-                    } else if self.consume(TokenKind::EOF) {
-                        self.add_error("開きカッコに対応する閉じカッコがありません");
-                        break;
-                    }
-
-                    expect!(self, TokenKind::Comma);
-                }
-
-                return match self.functions.get(&ident) {
-                    Some(func) => Expr::Call(ident, func.return_type.clone(), args),
-                    None => Expr::Call(ident, Type::Int, args),
-                };
-            } else {
-                // 変数
-                return match (self.variables.get(&ident), self.global_variables.get(&ident)) {
-                    (Some(variable), _) | (_, Some(variable)) => Expr::Variable(variable.clone()),
-                    _ => self.invalid_expr(&format!("変数 \"{}\" が見つかりません", ident), -1),
-                };
-            }
+            return self.parse_var_or_call(ident);
         }
 
         match self.get_token_and_next() {
@@ -650,71 +666,80 @@ impl Parser {
         }
     }
 
+    fn parse_func_decl(&mut self, ty: Type, ident: String) -> Declaration {
+        self.stack_size = 0;
+
+        // 引数をパース
+        self.variables = HashMap::<String, Variable>::new();
+        loop {
+            let _ = self.expect_define(true);
+
+            if self.consume(TokenKind::Rparen) {
+                break;
+            } else if !self.consume(TokenKind::Comma) {
+                self.add_error("',' か ')' ではないトークンです");
+                break;
+            }
+        }
+
+        // 引数をVec<Variable>に変換
+        let mut args: Vec<Variable> = self.variables.clone().into_iter().map(|(_, v)| v).collect();
+        args.sort_by_key(|v| {
+            match v.location {
+                Location::Local(offset) => offset,
+                _ => panic!("引数がグローバル変数です"),
+            }
+        });
+
+        self.functions.insert(ident.clone(), Function::new(ty, self.variables.clone().into_iter().map(|(_, v)| v).collect()));
+
+        let stmt = self.parse_stmt();
+        match stmt {
+            Stmt::Block(_) => {},
+            _ => self.add_error("ブロックではありません"),
+        };
+
+        Declaration::Func(ident, args, self.stack_size, stmt)
+    }
+
+    fn parse_global_var_decl(&mut self, ty: Type, ident: String) -> Option<Declaration> {
+        // 添字演算子があったら配列型にする
+        let mut ty = ty;
+        while let Some(size) = self.expect_subscript() {
+            ty = Type::Array(Box::new(ty), size);
+        }
+
+        // = があったら初期化式をパース
+        let init_expr = if self.consume(TokenKind::Assign) {
+            // { があったら初期化リストとしてパース
+            match self.get_token() {
+                TokenKind::Lbrace => Some(self.parse_initializer()),
+                _ => Some(self.parse_add()),
+            }
+        } else {
+            None
+        };
+
+        expect!(self, TokenKind::Semicolon);
+
+        let variable = Variable::new(ty, Location::Global(ident.clone()));
+        self.global_variables.insert(ident.clone(), variable.clone());
+        Some(Declaration::GlobalVariable(variable, init_expr))
+    }
+
     pub fn parse_declaration(&mut self) -> Option<Declaration> {
+        // 型
         let ty = self.expect_type();
-        return if let Some(ty) = ty {
+        if let Some(ty) = ty {
+            // 識別子
             let ident = self.expect_ident();
             if let Some(ident) = ident {
                 if self.consume(TokenKind::Lparen) {
-                    // 関数定義
-                    self.stack_size = 0;
-
-                    // 引数をパース
-                    self.variables = HashMap::<String, Variable>::new();
-                    loop {
-                        let _ = self.expect_define(true);
-
-                        if self.consume(TokenKind::Rparen) {
-                            break;
-                        } else if !self.consume(TokenKind::Comma) {
-                            self.add_error("',' か ')' ではないトークンです");
-                            break;
-                        }
-                    }
-
-                    // 引数をVec<Variable>に変換
-                    let mut args: Vec<Variable> = self.variables.clone().into_iter().map(|(_, v)| v).collect();
-                    args.sort_by_key(|v| {
-                        match v.location {
-                            Location::Local(offset) => offset,
-                            _ => panic!("引数がグローバル変数です"),
-                        }
-                    });
-
-                    self.functions.insert(ident.clone(), Function::new(Type::Int, self.variables.clone().into_iter().map(|(_, v)| v).collect()));
-
-                    let stmt = self.parse_stmt();
-                    match stmt {
-                        Stmt::Block(_) => {},
-                        _ => self.add_error("ブロックではありません"),
-                    };
-
-                    Some(Declaration::Func(ident, args, self.stack_size, stmt))
+                    // 識別子の次のトークンが開きカッコだったら関数定義としてパースする
+                    Some(self.parse_func_decl(ty, ident))
                 } else {
-                    // グローバル変数定義
-
-                    // 添字演算子があったら配列型にする
-                    let mut ty = ty;
-                    while let Some(size) = self.expect_subscript() {
-                        ty = Type::Array(Box::new(ty), size);
-                    }
-
-                    // = があったら初期化式をパース
-                    let init_expr = if self.consume(TokenKind::Assign) {
-                        // { があったら初期化リストとしてパース
-                        match self.get_token() {
-                            TokenKind::Lbrace => Some(self.parse_initializer()),
-                            _ => Some(self.parse_add()),
-                        }
-                    } else {
-                        None
-                    };
-
-                    expect!(self, TokenKind::Semicolon);
-
-                    let variable = Variable::new(ty, Location::Global(ident.clone()));
-                    self.global_variables.insert(ident.clone(), variable.clone());
-                    Some(Declaration::GlobalVariable(variable, init_expr))
+                    // 開きカッコではなかったらグローバル変数定義としてパースする
+                    self.parse_global_var_decl(ty, ident)
                 }
             } else {
                 self.add_error("識別子ではありません");
