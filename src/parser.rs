@@ -116,7 +116,7 @@ pub enum Stmt {
     Return(Expr),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     While(Expr, Box<Stmt>),
-    For(Option<Expr>, Option<Expr>, Option<Expr>, Box<Stmt>),
+    For(Option<Box<Stmt>>, Option<Expr>, Option<Expr>, Box<Stmt>),
     Block(Vec<Stmt>),
     Define(Variable, Option<Expr>),
 }
@@ -641,23 +641,36 @@ impl Parser {
     fn parse_for_stmt(&mut self) -> Stmt {
         expect!(self, TokenKind::Lparen);
 
-        let mut parse_expr_in_for = |is_last: bool| -> Option<Expr> {
-            if self.consume(TokenKind::Semicolon) { 
-                None
-            } else {
-                let expr = self.parse_expr();
-
-                expect!(self, if !is_last { TokenKind::Semicolon } else { TokenKind::Rparen });
-
-                Some(expr)
-            }
+        // 初期化
+        let init_stmt = if let Some(stmt) = self.expect_define_stmt() {
+            Some(Box::new(stmt))
+        } else if !self.consume(TokenKind::Semicolon) {
+            let expr = self.parse_expr();
+            expect!(self, TokenKind::Semicolon);
+            Some(Box::new(Stmt::Expr(expr)))
+        } else {
+            None
+        };
+        
+        // 条件
+        let cond = if !self.consume(TokenKind::Semicolon) {
+            let expr = self.parse_expr();
+            expect!(self, TokenKind::Semicolon);
+            Some(expr)
+        } else {
+            None
         };
 
-        let expr1 = parse_expr_in_for(false);
-        let expr2 = parse_expr_in_for(false);
-        let expr3  = parse_expr_in_for(true);
+        // i++ するところ
+        let expr3 = if !self.consume(TokenKind::Semicolon) {
+            Some(self.parse_expr())
+        } else {
+            None
+        };
 
-        Stmt::For(expr1, expr2, expr3, Box::new(self.parse_stmt()))
+        expect!(self, TokenKind::Rparen);
+
+        Stmt::For(init_stmt, cond, expr3, Box::new(self.parse_stmt()))
     }
 
     fn parse_block_stmt(&mut self) -> Stmt {
@@ -683,7 +696,7 @@ impl Parser {
         stmt
     }
 
-    fn parse_stmt(&mut self) -> Stmt {
+    fn expect_define_stmt(&mut self) -> Option<Stmt> {
         // 変数定義
         let variable = self.expect_define(false);
         if let Some(variable) = variable {
@@ -699,7 +712,15 @@ impl Parser {
             };
 
             expect!(self, TokenKind::Semicolon);
-            return Stmt::Define(variable, init_expr);
+            Some(Stmt::Define(variable, init_expr))
+        } else {
+            None
+        }
+    }
+
+    fn parse_stmt(&mut self) -> Stmt {
+        if let Some(stmt) = self.expect_define_stmt() {
+            return stmt;
         }
 
         match self.get_token_and_next() {

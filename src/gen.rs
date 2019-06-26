@@ -370,13 +370,13 @@ impl Generator {
         add_label!(self, ".Lend", label_num);
     }
 
-    fn gen_for_stmt(&mut self, init: Option<Expr>, cond: Option<Expr>, loop_expr: Option<Expr>, stmt: Stmt) {
+    fn gen_for_stmt(&mut self, init: Option<Box<Stmt>>, cond: Option<Expr>, loop_expr: Option<Expr>, stmt: Stmt) {
         self.label_num += 1;
         let label_num = self.label_num;
 
         // 初期化式
         if let Some(init) = init {
-            self.gen_expr(init);
+            self.gen_stmt(*init);
             add_mnemonic!(self, "pop rax");
         }
 
