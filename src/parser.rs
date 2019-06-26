@@ -35,6 +35,8 @@ pub enum Infix {
     BitAnd,
     BitOr,
     BitXor,
+    Shl,
+    Shr,
 }
 
 #[derive(Debug, Clone)]
@@ -491,18 +493,32 @@ impl Parser {
         }
     }
 
-    fn parse_relational(&mut self) -> Expr {
+    fn parse_shift(&mut self) -> Expr {
         let mut expr = self.parse_add(); 
 
         loop {
+            if self.consume(TokenKind::Shl) {
+                expr = Expr::Infix(Infix::Shl, Box::new(expr), Box::new(self.parse_add()));
+            } else if self.consume(TokenKind::Shr) {
+                expr = Expr::Infix(Infix::Shr, Box::new(expr), Box::new(self.parse_add()));
+            } else {
+                return expr;
+            }
+        }
+    }
+
+    fn parse_relational(&mut self) -> Expr {
+        let mut expr = self.parse_shift(); 
+
+        loop {
             if self.consume(TokenKind::LessThan) {
-                expr = Expr::Infix(Infix::LessThan, Box::new(expr), Box::new(self.parse_add()));
+                expr = Expr::Infix(Infix::LessThan, Box::new(expr), Box::new(self.parse_shift()));
             } else if self.consume(TokenKind::LessThanOrEqual) {
-                expr = Expr::Infix(Infix::LessThanOrEqual, Box::new(expr), Box::new(self.parse_add()));
+                expr = Expr::Infix(Infix::LessThanOrEqual, Box::new(expr), Box::new(self.parse_shift()));
             } else if self.consume(TokenKind::GreaterThan) {
-                expr = Expr::Infix(Infix::LessThan, Box::new(self.parse_add()), Box::new(expr));
+                expr = Expr::Infix(Infix::LessThan, Box::new(self.parse_shift()), Box::new(expr));
             } else if self.consume(TokenKind::GreaterThanOrEqual) {
-                expr = Expr::Infix(Infix::LessThanOrEqual, Box::new(self.parse_add()), Box::new(expr));
+                expr = Expr::Infix(Infix::LessThanOrEqual, Box::new(self.parse_shift()), Box::new(expr));
             } else {
                 return expr;
             }

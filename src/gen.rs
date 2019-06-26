@@ -232,9 +232,6 @@ impl Generator {
             Infix::Add => add_mnemonic!(self, "add rax, rdi"),
             Infix::Sub => add_mnemonic!(self, "sub rax, rdi"),
             Infix::Mul => add_mnemonic!(self, "imul rdi"),
-            Infix::BitAnd => add_mnemonic!(self, "and rax, rdi"),
-            Infix::BitOr => add_mnemonic!(self, "or rax, rdi"),
-            Infix::BitXor => add_mnemonic!(self, "xor rax, rdi"),
             Infix::Div => {
                 add_mnemonic!(self, "cqo");
                 add_mnemonic!(self, "idiv rdi");
@@ -243,6 +240,17 @@ impl Generator {
                 add_mnemonic!(self, "cqo");
                 add_mnemonic!(self, "idiv rdi");
                 add_mnemonic!(self, "mov rax, rdx");
+            },
+            Infix::BitAnd => add_mnemonic!(self, "and rax, rdi"),
+            Infix::BitOr => add_mnemonic!(self, "or rax, rdi"),
+            Infix::BitXor => add_mnemonic!(self, "xor rax, rdi"),
+            Infix::Shl => {
+                add_mnemonic!(self, "mov ecx, edi");
+                add_mnemonic!(self, "sal rax, cl");
+            },
+            Infix::Shr => {
+                add_mnemonic!(self, "mov ecx, edi");
+                add_mnemonic!(self, "sar rax, cl");
             },
             Infix::Equal => {
                 add_mnemonic!(self, "cmp rax, rdi");

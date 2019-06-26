@@ -48,6 +48,8 @@ int main() {
     expect("bit or", 239, 135 | 232);
     expect("bit xor", 111, 135 ^ 232);
     expect("bit not", -54, ~53);
+    expect("left shift", 18176, 71 << 8);
+    expect("right shift", 12, 50 >> 2);
 
     int a;
     a = 5;

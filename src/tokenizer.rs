@@ -36,6 +36,8 @@ pub enum TokenKind {
     Xor,
     BitNot,
     Mod,
+    Shl,
+    Shr,
 }
 
 impl ToString for TokenKind {
@@ -77,6 +79,8 @@ impl ToString for TokenKind {
             TokenKind::Xor => "^",
             TokenKind::BitNot => "~",
             TokenKind::Mod => "%",
+            TokenKind::Shl => "<<",
+            TokenKind::Shr => ">>",
         })
     }
 }
@@ -286,8 +290,10 @@ impl Tokenizer {
                 '=' if self.next_is('=') => self.add_token_and_skip(TokenKind::Equal, 2),
                 '=' => self.add_token_and_skip(TokenKind::Assign, 1),
                 '!' if self.next_is('=') => self.add_token_and_skip(TokenKind::NotEqual, 2),
+                '<' if self.next_is('<') => self.add_token_and_skip(TokenKind::Shl, 2),
                 '<' if self.next_is('=') => self.add_token_and_skip(TokenKind::LessThanOrEqual, 2),
                 '<' => self.add_token_and_skip(TokenKind::LessThan, 1),
+                '>' if self.next_is('>') => self.add_token_and_skip(TokenKind::Shr, 2),
                 '>' if self.next_is('=') => self.add_token_and_skip(TokenKind::GreaterThanOrEqual, 2),
                 '>' => self.add_token_and_skip(TokenKind::GreaterThan, 1),
                 ';' => self.add_token_and_skip(TokenKind::Semicolon, 1),
