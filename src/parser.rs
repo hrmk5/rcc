@@ -73,6 +73,7 @@ pub enum Expr {
     Infix(Infix, Box<Expr>,  Box<Expr>),
     Call(String, Type, Vec<Expr>),
     Initializer(Vec<Expr>),
+    BitNot(Box<Expr>),
     Invalid,
 }
 
@@ -100,6 +101,7 @@ impl Expr {
             },
             Expr::Infix(_, _, _) => Some(Type::Int),
             Expr::Call(_, ty, _) => Some(ty.clone()),
+            Expr::BitNot(expr) => expr.get_type(),
             Expr::Invalid | Expr::Initializer(_) => None,
         }
     }
@@ -450,6 +452,7 @@ impl Parser {
             TokenKind::SizeOf => self.parse_unary_sizeof(),
             TokenKind::Asterisk => self.parse_unary_deref(),
             TokenKind::Ampersand => self.parse_unary_address(),
+            TokenKind::BitNot => Expr::BitNot(Box::new(self.parse_postfix())),
             _ => {
                 self.pos -= 1;
                 self.parse_postfix()

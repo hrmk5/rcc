@@ -281,6 +281,13 @@ impl Generator {
         add_mnemonic!(self, "push rax");
     }
 
+    fn gen_bit_not(&mut self, expr: Expr) {
+        self.gen_expr(expr);
+        add_mnemonic!(self, "pop rax");
+        add_mnemonic!(self, "not rax");
+        add_mnemonic!(self, "push rax");
+    }
+
     fn gen_expr(&mut self, expr: Expr) {
         match expr {
             Expr::Literal(Literal::Number(num)) => {
@@ -295,7 +302,9 @@ impl Generator {
             Expr::Assign(lhs, rhs) => self.gen_assign(*lhs, *rhs),
             Expr::Infix(kind, lhs, rhs) => self.gen_infix(kind, *lhs, *rhs),
             Expr::Call(name, ty, args) => self.gen_call(name, ty, args),
-            _ => {},
+            Expr::BitNot(expr) => self.gen_bit_not(*expr),
+            Expr::Initializer(_) => panic!("unexpected initializer"),
+            Expr::Invalid => eprintln!("invalid expression"),
         };
     }
 

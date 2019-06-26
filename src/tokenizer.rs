@@ -34,6 +34,7 @@ pub enum TokenKind {
     String(String),
     Or,
     Xor,
+    BitNot,
 }
 
 impl ToString for TokenKind {
@@ -73,6 +74,7 @@ impl ToString for TokenKind {
             TokenKind::String(_) => "string",
             TokenKind::Or => "|",
             TokenKind::Xor => "^",
+            TokenKind::BitNot => "~",
         })
     }
 }
@@ -292,6 +294,7 @@ impl Tokenizer {
                 '"' => self.tokenize_string(),
                 '|' => self.add_token_and_skip(TokenKind::Or, 1),
                 '^' => self.add_token_and_skip(TokenKind::Xor, 1),
+                '~' => self.add_token_and_skip(TokenKind::BitNot, 1),
                 '\0' => break,
                 _ => { self.add_error("Unexpected token"); self.next() },
             }

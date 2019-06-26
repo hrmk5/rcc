@@ -46,6 +46,7 @@ int main() {
     expect("bit and", 128, 135 & 232);
     expect("bit or", 239, 135 | 232);
     expect("bit xor", 111, 135 ^ 232);
+    expect("bit not", -54, ~53);
 
     int a;
     a = 5;
