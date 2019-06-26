@@ -27,6 +27,7 @@ pub enum Infix {
     Sub,
     Mul,
     Div,
+    Mod,
     LessThan,
     LessThanOrEqual,
     Equal,
@@ -468,6 +469,8 @@ impl Parser {
                 expr = Expr::Infix(Infix::Mul, Box::new(expr), Box::new(self.parse_unary()));
             } else if self.consume(TokenKind::Div) {
                 expr = Expr::Infix(Infix::Div, Box::new(expr), Box::new(self.parse_unary()));
+            } else if self.consume(TokenKind::Mod) {
+                expr = Expr::Infix(Infix::Mod, Box::new(expr), Box::new(self.parse_unary()));
             } else {
                 return expr;
             }

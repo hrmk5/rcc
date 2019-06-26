@@ -39,6 +39,7 @@ int main() {
     expect("mul", 24, 3 * 8);
     expect("div", 5, 25 / 5);
     expect("div2", 5, 28 / 5);
+    expect("mod", 2, 32 % 10);
     expect("precedence", 19, 4 + 5 * 3);
     expect("precedence2", 11, 5 + (7 - 5) * 3);
 

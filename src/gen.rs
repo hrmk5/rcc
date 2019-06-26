@@ -239,6 +239,11 @@ impl Generator {
                 add_mnemonic!(self, "cqo");
                 add_mnemonic!(self, "idiv rdi");
             },
+            Infix::Mod => {
+                add_mnemonic!(self, "cqo");
+                add_mnemonic!(self, "idiv rdi");
+                add_mnemonic!(self, "mov rax, rdx");
+            },
             Infix::Equal => {
                 add_mnemonic!(self, "cmp rax, rdi");
                 add_mnemonic!(self, "sete al");
