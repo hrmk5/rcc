@@ -232,6 +232,9 @@ impl Generator {
             Infix::Add => add_mnemonic!(self, "add rax, rdi"),
             Infix::Sub => add_mnemonic!(self, "sub rax, rdi"),
             Infix::Mul => add_mnemonic!(self, "imul rdi"),
+            Infix::BitAnd => add_mnemonic!(self, "and rax, rdi"),
+            Infix::BitOr => add_mnemonic!(self, "or rax, rdi"),
+            Infix::BitXor => add_mnemonic!(self, "xor rax, rdi"),
             Infix::Div => {
                 add_mnemonic!(self, "cqo");
                 add_mnemonic!(self, "idiv rdi");

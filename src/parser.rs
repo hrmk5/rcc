@@ -31,6 +31,9 @@ pub enum Infix {
     LessThanOrEqual,
     Equal,
     NotEqual,
+    BitAnd,
+    BitOr,
+    BitXor,
 }
 
 #[derive(Debug, Clone)]
@@ -514,8 +517,32 @@ impl Parser {
         }
     }
 
-    fn parse_assign(&mut self) -> Expr {
+    fn parse_bit_and(&mut self) -> Expr {
         let mut expr = self.parse_equality();
+        while self.consume(TokenKind::Ampersand) {
+            expr = Expr::Infix(Infix::BitAnd, Box::new(expr), Box::new(self.parse_equality()));
+        }
+        expr
+    }
+
+    fn parse_bit_xor(&mut self) -> Expr {
+        let mut expr = self.parse_bit_and();
+        while self.consume(TokenKind::Xor) {
+            expr = Expr::Infix(Infix::BitXor, Box::new(expr), Box::new(self.parse_bit_and()));
+        }
+        expr
+    }
+
+    fn parse_bit_or(&mut self) -> Expr {
+        let mut expr = self.parse_bit_xor();
+        while self.consume(TokenKind::Or) {
+            expr = Expr::Infix(Infix::BitOr, Box::new(expr), Box::new(self.parse_bit_xor()));
+        }
+        expr
+    }
+
+    fn parse_assign(&mut self) -> Expr {
+        let mut expr = self.parse_bit_or();
         if self.consume(TokenKind::Assign) {
             expr = Expr::Assign(Box::new(expr), Box::new(self.parse_assign()));
         }

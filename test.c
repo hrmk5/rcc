@@ -42,6 +42,11 @@ int main() {
     expect("precedence", 19, 4 + 5 * 3);
     expect("precedence2", 11, 5 + (7 - 5) * 3);
 
+    // TODO: 二進数リテラルに置き換える
+    expect("bit and", 128, 135 & 232);
+    expect("bit or", 239, 135 | 232);
+    expect("bit xor", 111, 135 ^ 232);
+
     int a;
     a = 5;
     expect("variable", 5, a);

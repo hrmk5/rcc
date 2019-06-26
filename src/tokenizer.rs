@@ -32,6 +32,8 @@ pub enum TokenKind {
     Rbracket,
     Char,
     String(String),
+    Or,
+    Xor,
 }
 
 impl ToString for TokenKind {
@@ -69,6 +71,8 @@ impl ToString for TokenKind {
             TokenKind::Rbracket => "]",
             TokenKind::Char => "char",
             TokenKind::String(_) => "string",
+            TokenKind::Or => "|",
+            TokenKind::Xor => "^",
         })
     }
 }
@@ -286,6 +290,8 @@ impl Tokenizer {
                 ',' => self.add_token_and_skip(TokenKind::Comma, 1),
                 '&' => self.add_token_and_skip(TokenKind::Ampersand, 1),
                 '"' => self.tokenize_string(),
+                '|' => self.add_token_and_skip(TokenKind::Or, 1),
+                '^' => self.add_token_and_skip(TokenKind::Xor, 1),
                 '\0' => break,
                 _ => { self.add_error("Unexpected token"); self.next() },
             }
