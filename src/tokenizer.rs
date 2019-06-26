@@ -180,15 +180,15 @@ impl Tokenizer {
         }
     }
 
-    fn tokenize_number(&mut self) {
+    fn tokenize_number(&mut self, radix: u32) {
         let start_col = self.col;
-        let mut num: i32 = 0;
-        while self.ch.is_ascii_digit() {
-            num = (10 * num) + self.ch.to_digit(10).unwrap() as i32;
+        let mut num: u32 = 0;
+        while self.ch.is_digit(radix) {
+            num = (radix * num) + self.ch.to_digit(radix).unwrap() as u32;
             self.next();
         }
 
-        self.add_token(TokenKind::Number(num), start_col, self.col);
+        self.add_token(TokenKind::Number(num as i32), start_col, self.col);
     }
 
     fn tokenize_ident(&mut self) {
@@ -273,7 +273,18 @@ impl Tokenizer {
             self.skip_whitespace();
 
             match self.ch {
-                c if c.is_ascii_digit() => self.tokenize_number(),
+                '0' if self.next_is('x') => {
+                    // "0x" を消費
+                    self.next();
+                    self.next();
+                    self.tokenize_number(16)
+                },
+                '0' => {
+                    // "0" を消費
+                    self.next();
+                    self.tokenize_number(8);
+                },
+                c if c.is_digit(10) => self.tokenize_number(10),
                 c if c.is_ascii_alphanumeric() || c == '_' => self.tokenize_ident(),
                 '+' => self.add_token_and_skip(TokenKind::Add, 1),
                 '-' => self.add_token_and_skip(TokenKind::Sub, 1),

@@ -34,6 +34,9 @@ int main() {
     expect("-1", -1, -1);
     expect("-2", -2, 0 - 2);
 
+    expect("hex", 48879, 0xbeef);
+    expect("octal", 30341, 073205);
+
     expect("add", 3, 1 + 2);
     expect("sub", 10, 84 - 74);
     expect("mul", 24, 3 * 8);
