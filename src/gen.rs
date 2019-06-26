@@ -1,4 +1,4 @@
-use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration, Type, Location};
+use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration, Type, Location, Variable};
 
 pub struct Generator {
     pub code: String,
@@ -142,6 +142,142 @@ impl Generator {
         }
     }
 
+    fn gen_var_or_deref(&mut self, expr: Expr) {
+        let ty = expr.get_type().unwrap();
+        let size = self.gen_lvalue(expr.clone());
+
+        if let Some(size) = size {
+            let size_str = self.get_size_str(size).unwrap();
+            let register = self.get_size_register(if size == 1 { 4 } else { size }, "rax").unwrap();
+            let mov = match size {
+                1 => "movsx",
+                _ => "mov",
+            };
+
+            match ty {
+                // 配列型だったらメモリアクセスせずにアドレスを返す
+                Type::Array(_, _) => {},
+                _ => {
+                    add_mnemonic!(self, "pop rax");
+                    add_mnemonic!(self, "{} {}, {} [rax]", mov, register, size_str);
+                    add_mnemonic!(self, "push rax");
+                },
+            };
+        }
+    }
+
+    fn gen_address(&mut self, variable: Variable) {
+        match variable.location {
+            Location::Local(offset) => {
+                add_mnemonic!(self, "mov rax, rbp");
+                add_mnemonic!(self, "sub rax, {}", offset);
+                add_mnemonic!(self, "push rax");
+            },
+            Location::Global(name) => {
+                add_mnemonic!(self, "lea rax, {}[rip]", &name);
+                add_mnemonic!(self, "push rax");
+            },
+        };
+    }
+
+    fn gen_assign(&mut self, lhs: Expr, rhs: Expr) {
+        let size = self.gen_lvalue(lhs);
+        if let Some(size) = size {
+            self.gen_expr(rhs);
+
+            add_mnemonic!(self, "pop rdx");
+            add_mnemonic!(self, "pop rax");
+            add_mnemonic!(self, "mov {} [rax], {}", self.get_size_str(size).unwrap(), self.get_size_register(size, "rdx").unwrap());
+            add_mnemonic!(self, "push rdx");
+        }
+    }
+
+    fn gen_infix(&mut self, kind: Infix, lhs: Expr, rhs: Expr) {
+        match kind.clone() {
+            Infix::Add | Infix::Sub => match (lhs.get_type(), rhs.get_type()) {
+                (Some(Type::Pointer(ty)), Some(Type::Int)) | (Some(Type::Array(ty, _)), Some(Type::Int)) => {
+                    self.gen_expr(lhs);
+                    self.gen_expr(rhs);
+                    // rhsにポインタか配列の型のサイズを掛ける
+                    add_mnemonic!(self, "pop rdi");
+                    add_mnemonic!(self, "mov rax, {}", ty.get_size());
+                    add_mnemonic!(self, "imul rdi");
+                    add_mnemonic!(self, "push rax");
+                },
+                (Some(Type::Int), Some(Type::Pointer(ty))) | (Some(Type::Int), Some(Type::Array(ty, _))) => {
+                    self.gen_expr(lhs);
+                    // lhsにポインタか配列の型のサイズを掛ける
+                    add_mnemonic!(self, "pop rdi");
+                    add_mnemonic!(self, "mov rax, {}", ty.get_size());
+                    add_mnemonic!(self, "imul rdi");
+                    add_mnemonic!(self, "push rax");
+
+                    self.gen_expr(rhs);
+                },
+                _ => {
+                    self.gen_expr(lhs);
+                    self.gen_expr(rhs);
+                },
+            },
+            _ => {
+                self.gen_expr(lhs);
+                self.gen_expr(rhs);
+            },
+        };
+
+        add_mnemonic!(self, "pop rdi");
+        add_mnemonic!(self, "pop rax");
+
+        match kind {
+            Infix::Add => add_mnemonic!(self, "add rax, rdi"),
+            Infix::Sub => add_mnemonic!(self, "sub rax, rdi"),
+            Infix::Mul => add_mnemonic!(self, "imul rdi"),
+            Infix::Div => {
+                add_mnemonic!(self, "cqo");
+                add_mnemonic!(self, "idiv rdi");
+            },
+            Infix::Equal => {
+                add_mnemonic!(self, "cmp rax, rdi");
+                add_mnemonic!(self, "sete al");
+                add_mnemonic!(self, "movzb  rax, al");
+            },
+            Infix::NotEqual => {
+                add_mnemonic!(self, "cmp rax, rdi");
+                add_mnemonic!(self, "setne al");
+                add_mnemonic!(self, "movzb  rax, al");
+            }
+            Infix::LessThan => {
+                add_mnemonic!(self, "cmp rax, rdi");
+                add_mnemonic!(self, "setl al");
+                add_mnemonic!(self, "movzb  rax, al");
+            },
+            Infix::LessThanOrEqual => {
+                add_mnemonic!(self, "cmp rax, rdi");
+                add_mnemonic!(self, "setle al");
+                add_mnemonic!(self, "movzb  rax, al");
+            },
+        };
+
+        add_mnemonic!(self, "push rax");
+    }
+
+    fn gen_call(&mut self, name: String, _: Type, args: Vec<Expr>) {
+        let arg_count = args.len();
+        for arg_expr in args {
+            self.gen_expr(arg_expr);
+        }
+
+        for register in ARG_REGISTERS[6 - arg_count..].iter() {
+            add_mnemonic!(self, "pop {}", register);
+        }
+        // 浮動小数点の引数の数
+        add_mnemonic!(self, "mov al, 0");
+        // TODO: RSP を調整する
+        // 調整してないけど動く
+        add_mnemonic!(self, "call {}", name);
+        add_mnemonic!(self, "push rax");
+    }
+
     fn gen_expr(&mut self, expr: Expr) {
         match expr {
             Expr::Literal(Literal::Number(num)) => {
@@ -151,263 +287,147 @@ impl Generator {
                 add_mnemonic!(self, "lea rax, .Ltext{}[rip]", num);
                 add_mnemonic!(self, "push rax");
             },
-            Expr::Variable(_) | Expr::Dereference(_) => {
-                let ty = expr.get_type().unwrap();
-                let size = self.gen_lvalue(expr.clone());
-
-                if let Some(size) = size {
-                    let size_str = self.get_size_str(size).unwrap();
-                    let register = self.get_size_register(if size == 1 { 4 } else { size }, "rax").unwrap();
-                    let mov = match size {
-                        1 => "movsx",
-                        _ => "mov",
-                    };
-
-                    match ty {
-                        // 配列型だったらメモリアクセスせずにアドレスを返す
-                        Type::Array(_, _) => {},
-                        _ => {
-                            add_mnemonic!(self, "pop rax");
-                            add_mnemonic!(self, "{} {}, {} [rax]", mov, register, size_str);
-                            add_mnemonic!(self, "push rax");
-                        },
-                    };
-                }
-            },
-            Expr::Address(variable) => {
-                match variable.location {
-                    Location::Local(offset) => {
-                        add_mnemonic!(self, "mov rax, rbp");
-                        add_mnemonic!(self, "sub rax, {}", offset);
-                        add_mnemonic!(self, "push rax");
-                    },
-                    Location::Global(name) => {
-                        add_mnemonic!(self, "lea rax, {}[rip]", &name);
-                        add_mnemonic!(self, "push rax");
-                    },
-                };
-            },
-            Expr::Assign(lhs, rhs) => {
-                let size = self.gen_lvalue(*lhs);
-                if let Some(size) = size {
-                    self.gen_expr(*rhs);
-
-                    add_mnemonic!(self, "pop rdx");
-                    add_mnemonic!(self, "pop rax");
-                    add_mnemonic!(self, "mov {} [rax], {}", self.get_size_str(size).unwrap(), self.get_size_register(size, "rdx").unwrap());
-                    add_mnemonic!(self, "push rdx");
-                }
-            },
-            Expr::Infix(kind, lhs, rhs) => {
-                match kind.clone() {
-                    Infix::Add | Infix::Sub => match (lhs.get_type(), rhs.get_type()) {
-                        (Some(Type::Pointer(ty)), Some(Type::Int)) | (Some(Type::Array(ty, _)), Some(Type::Int)) => {
-                            self.gen_expr(*lhs);
-                            self.gen_expr(*rhs);
-                            // rhsにポインタか配列の型のサイズを掛ける
-                            add_mnemonic!(self, "pop rdi");
-                            add_mnemonic!(self, "mov rax, {}", ty.get_size());
-                            add_mnemonic!(self, "imul rdi");
-                            add_mnemonic!(self, "push rax");
-                        },
-                        (Some(Type::Int), Some(Type::Pointer(ty))) | (Some(Type::Int), Some(Type::Array(ty, _))) => {
-                            self.gen_expr(*lhs);
-                            // lhsにポインタか配列の型のサイズを掛ける
-                            add_mnemonic!(self, "pop rdi");
-                            add_mnemonic!(self, "mov rax, {}", ty.get_size());
-                            add_mnemonic!(self, "imul rdi");
-                            add_mnemonic!(self, "push rax");
-
-                            self.gen_expr(*rhs);
-                        },
-                        _ => {
-                            self.gen_expr(*lhs);
-                            self.gen_expr(*rhs);
-                        },
-                    },
-                    _ => {
-                        self.gen_expr(*lhs);
-                        self.gen_expr(*rhs);
-                    },
-                };
-
-                add_mnemonic!(self, "pop rdi");
-                add_mnemonic!(self, "pop rax");
-
-                match kind {
-                    Infix::Add => add_mnemonic!(self, "add rax, rdi"),
-                    Infix::Sub => add_mnemonic!(self, "sub rax, rdi"),
-                    Infix::Mul => add_mnemonic!(self, "imul rdi"),
-                    Infix::Div => {
-                        add_mnemonic!(self, "cqo");
-                        add_mnemonic!(self, "idiv rdi");
-                    },
-                    Infix::Equal => {
-                        add_mnemonic!(self, "cmp rax, rdi");
-                        add_mnemonic!(self, "sete al");
-                        add_mnemonic!(self, "movzb  rax, al");
-                    },
-                    Infix::NotEqual => {
-                        add_mnemonic!(self, "cmp rax, rdi");
-                        add_mnemonic!(self, "setne al");
-                        add_mnemonic!(self, "movzb  rax, al");
-                    }
-                    Infix::LessThan => {
-                        add_mnemonic!(self, "cmp rax, rdi");
-                        add_mnemonic!(self, "setl al");
-                        add_mnemonic!(self, "movzb  rax, al");
-                    },
-                    Infix::LessThanOrEqual => {
-                        add_mnemonic!(self, "cmp rax, rdi");
-                        add_mnemonic!(self, "setle al");
-                        add_mnemonic!(self, "movzb  rax, al");
-                    },
-                };
-
-                add_mnemonic!(self, "push rax");
-            },
-            Expr::Call(name, _, args) => {
-                let arg_count = args.len();
-                for arg_expr in args {
-                    self.gen_expr(arg_expr);
-                }
-
-                for register in ARG_REGISTERS[6 - arg_count..].iter() {
-                    add_mnemonic!(self, "pop {}", register);
-                }
-                // 浮動小数点の引数の数
-                add_mnemonic!(self, "mov al, 0");
-                // TODO: RSP を調整する
-                // 調整してないけど動く
-                add_mnemonic!(self, "call {}", name);
-                add_mnemonic!(self, "push rax");
-            },
+            Expr::Variable(_) | Expr::Dereference(_) => self.gen_var_or_deref(expr),
+            Expr::Address(variable) => self.gen_address(variable),
+            Expr::Assign(lhs, rhs) => self.gen_assign(*lhs, *rhs),
+            Expr::Infix(kind, lhs, rhs) => self.gen_infix(kind, *lhs, *rhs),
+            Expr::Call(name, ty, args) => self.gen_call(name, ty, args),
             _ => {},
         };
     }
 
-    pub fn gen_stmt(&mut self, stmt: Stmt) {
+    fn gen_return_stmt(&mut self, expr: Expr) {
+        self.gen_expr(expr);
+        add_mnemonic!(self, "pop rax");
+        add_mnemonic!(self, "mov rsp, rbp");
+        add_mnemonic!(self, "pop rbp");
+        add_mnemonic!(self, "ret");
+    }
+
+    fn gen_if_stmt(&mut self, cond: Expr, if_stmt: Stmt, else_stmt: Option<Box<Stmt>>) {
+        self.gen_expr(cond);
+        add_mnemonic!(self, "pop rax");
+        add_mnemonic!(self, "cmp rax, 0");
+        self.label_num += 1;
+        let label_num = self.label_num;
+
+        // else 節がある場合
+        if let Some(else_stmt) = else_stmt {
+            add_mnemonic!(self, "je .Lelse{}", label_num);
+            self.gen_stmt(if_stmt);
+            add_mnemonic!(self, "jmp .Lend{}", label_num);
+            add_label!(self, ".Lelse", label_num);
+            self.gen_stmt(*else_stmt);
+        } else {
+            add_mnemonic!(self, "je .Lend{}", label_num);
+            self.gen_stmt(if_stmt);
+        }
+
+        add_label!(self, ".Lend", label_num);
+    }
+
+    fn gen_while_stmt(&mut self, expr: Expr, stmt: Stmt) {
+        self.label_num += 1;
+        let label_num = self.label_num;
+
+        add_label!(self, ".Lbegin", label_num);
+
+        // 条件式
+        self.gen_expr(expr);
+        add_mnemonic!(self, "pop rax");
+        add_mnemonic!(self, "cmp rax, 0");
+        add_mnemonic!(self, "je .Lend{}", label_num);
+
+        // 文
+        self.gen_stmt(stmt);
+        add_mnemonic!(self, "jmp .Lbegin{}", label_num);
+
+        add_label!(self, ".Lend", label_num);
+    }
+
+    fn gen_for_stmt(&mut self, init: Option<Expr>, cond: Option<Expr>, loop_expr: Option<Expr>, stmt: Stmt) {
+        self.label_num += 1;
+        let label_num = self.label_num;
+
+        // 初期化式
+        if let Some(init) = init {
+            self.gen_expr(init);
+            add_mnemonic!(self, "pop rax");
+        }
+
+        add_label!(self, ".Lbegin", label_num);
+
+        // 条件式
+        if let Some(cond) = cond {
+            self.gen_expr(cond);
+            add_mnemonic!(self, "pop rax");
+            add_mnemonic!(self, "cmp rax, 0");
+            add_mnemonic!(self, "je .Lend{}", label_num);
+        }
+
+        // 文
+        self.gen_stmt(stmt);
+
+        if let Some(loop_expr) = loop_expr {
+            self.gen_expr(loop_expr);
+        }
+
+        add_mnemonic!(self, "jmp .Lbegin{}", label_num);
+        add_label!(self, ".Lend", label_num);
+    }
+
+    fn gen_define_stmt(&mut self, variable: Variable, init_expr: Option<Expr>) {
+        let offset = match variable.location {
+            Location::Local(offset) => offset,
+            _ => panic!("ローカル変数ではありません"),
+        };
+
+        // 初期化式
+        if let Some(init_expr) = init_expr {
+            match init_expr {
+                Expr::Initializer(_) => self.gen_initalizer(offset, &variable.ty, init_expr),
+                expr => {
+                    self.gen_expr(expr);
+                    add_mnemonic!(self, "pop rax");
+
+                    let size = match variable.ty {
+                        Type::Array(_, _) => 8,
+                        ty => ty.get_size(),
+                    };
+
+                    let register = self.get_size_register(size, "rax").unwrap();
+                    let size_str = self.get_size_str(size).unwrap();
+                    add_mnemonic!(self, "mov {} [rbp-{}], {}", size_str, offset, register);
+                }
+            };
+        }
+    }
+
+    fn gen_block_stmt(&mut self, stmt_list: Vec<Stmt>) {
+        for stmt in stmt_list {
+            let must_pop = match stmt {
+                Stmt::Return(_) | Stmt::Define(_, _) => false,
+                _ => true,
+            };
+
+            self.gen_stmt(stmt);
+
+            if must_pop {
+                add_mnemonic!(self, "pop rax");
+            }
+        }
+    }
+
+    fn gen_stmt(&mut self, stmt: Stmt) {
         #[allow(unreachable_patterns)]
         match stmt {
             Stmt::Expr(expr) => self.gen_expr(expr),
-            Stmt::Return(expr) => {
-                self.gen_expr(expr);
-                add_mnemonic!(self, "pop rax");
-                add_mnemonic!(self, "mov rsp, rbp");
-                add_mnemonic!(self, "pop rbp");
-                add_mnemonic!(self, "ret");
-            },
-            Stmt::If(cond, if_stmt, else_stmt) => {
-                self.gen_expr(cond);
-                add_mnemonic!(self, "pop rax");
-                add_mnemonic!(self, "cmp rax, 0");
-                self.label_num += 1;
-                let label_num = self.label_num;
-
-                // else 節がある場合
-                if let Some(else_stmt) = else_stmt {
-                    add_mnemonic!(self, "je .Lelse{}", label_num);
-                    self.gen_stmt(*if_stmt);
-                    add_mnemonic!(self, "jmp .Lend{}", label_num);
-                    add_label!(self, ".Lelse", label_num);
-                    self.gen_stmt(*else_stmt);
-                } else {
-                    add_mnemonic!(self, "je .Lend{}", label_num);
-                    self.gen_stmt(*if_stmt);
-                }
-
-                add_label!(self, ".Lend", label_num);
-            },
-            Stmt::While(expr, stmt) => {
-                self.label_num += 1;
-                let label_num = self.label_num;
-
-                add_label!(self, ".Lbegin", label_num);
-
-                // 条件式
-                self.gen_expr(expr);
-                add_mnemonic!(self, "pop rax");
-                add_mnemonic!(self, "cmp rax, 0");
-                add_mnemonic!(self, "je .Lend{}", label_num);
-
-                // 文
-                self.gen_stmt(*stmt);
-                add_mnemonic!(self, "jmp .Lbegin{}", label_num);
-
-                add_label!(self, ".Lend", label_num);
-            },
-            Stmt::For(init, cond, loop_expr, stmt) => {
-                self.label_num += 1;
-                let label_num = self.label_num;
-
-                // 初期化式
-                if let Some(init) = init {
-                    self.gen_expr(init);
-                    add_mnemonic!(self, "pop rax");
-                }
-
-                add_label!(self, ".Lbegin", label_num);
-
-                // 条件式
-                if let Some(cond) = cond {
-                    self.gen_expr(cond);
-                    add_mnemonic!(self, "pop rax");
-                    add_mnemonic!(self, "cmp rax, 0");
-                    add_mnemonic!(self, "je .Lend{}", label_num);
-                }
-
-                // 文
-                self.gen_stmt(*stmt);
-                //add_mnemonic!(self, "pop rax");
-
-                if let Some(loop_expr) = loop_expr {
-                    self.gen_expr(loop_expr);
-                    //add_mnemonic!(self, "pop rax");
-                }
-
-                add_mnemonic!(self, "jmp .Lbegin{}", label_num);
-                add_label!(self, ".Lend", label_num);
-            },
-            Stmt::Define(variable, init_expr) => {
-                let offset = match variable.location {
-                    Location::Local(offset) => offset,
-                    _ => panic!("ローカル変数ではありません"),
-                };
-
-                // 初期化式
-                if let Some(init_expr) = init_expr {
-                    match init_expr {
-                        Expr::Initializer(_) => self.gen_initalizer(offset, &variable.ty, init_expr),
-                        expr => {
-                            self.gen_expr(expr);
-                            add_mnemonic!(self, "pop rax");
-
-                            let size = match variable.ty {
-                                Type::Array(_, _) => 8,
-                                ty => ty.get_size(),
-                            };
-
-                            let register = self.get_size_register(size, "rax").unwrap();
-                            let size_str = self.get_size_str(size).unwrap();
-                            add_mnemonic!(self, "mov {} [rbp-{}], {}", size_str, offset, register);
-                        }
-                    };
-                }
-            },
-            Stmt::Block(stmt_list) => {
-                for stmt in stmt_list {
-                    let must_pop = match stmt {
-                        Stmt::Return(_) | Stmt::Define(_, _) => false,
-                        _ => true,
-                    };
-
-                    self.gen_stmt(stmt);
-
-                    if must_pop {
-                        add_mnemonic!(self, "pop rax");
-                    }
-                }
-            },
+            Stmt::Return(expr) => self.gen_return_stmt(expr),
+            Stmt::If(cond, if_stmt, else_stmt) => self.gen_if_stmt(cond, *if_stmt, else_stmt),
+            Stmt::While(expr, stmt) => self.gen_while_stmt(expr, *stmt),
+            Stmt::For(init, cond, loop_expr, stmt) => self.gen_for_stmt(init, cond, loop_expr, *stmt),
+            Stmt::Define(variable, init_expr) => self.gen_define_stmt(variable, init_expr),
+            Stmt::Block(stmt_list) => self.gen_block_stmt(stmt_list),
             _ => {},
         }
     }
