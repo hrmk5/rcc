@@ -67,46 +67,43 @@ impl Variable {
 }
 
 #[derive(Debug, Clone)]
-pub enum Expr {
+pub enum ExprKind {
     Literal(Literal),
     Variable(Variable),
     Dereference(Box<Expr>),
     Address(Variable),
     Assign(Box<Expr>, Box<Expr>),
     Infix(Infix, Box<Expr>,  Box<Expr>),
-    Call(String, Type, Vec<Expr>),
+    Call(String, Vec<Expr>),
     Initializer(Vec<Expr>),
     BitNot(Box<Expr>),
+    SizeOf(Box<Expr>),
     Invalid,
 }
 
+#[derive(Debug, Clone)]
+pub struct Expr {
+    pub kind: ExprKind,
+    pub ty: Option<Type>,
+}
+
 impl Expr {
-    pub fn get_type(&self) -> Option<Type> {
-        match self {
-            Expr::Literal(Literal::Number(_)) => Some(Type::Int),
-            Expr::Literal(Literal::String(_)) => Some(Type::Pointer(Box::new(Type::Char))),
-            Expr::Variable(variable) => Some(variable.ty.clone()),
-            Expr::Dereference(expr) => match expr.get_type() {
-                Some(Type::Pointer(box ty)) => Some(ty.clone()),
-                Some(Type::Array(box ty, _)) => Some(ty.clone()),
-                _ => panic!("ポインタではない式を参照外ししています"),
-            },
-            Expr::Address(varaible) => Some(Type::Pointer(Box::new(varaible.ty.clone()))),
-            Expr::Assign(lhs, _) => lhs.get_type(),
-            Expr::Infix(Infix::Add, lhs, rhs) | Expr::Infix(Infix::Sub, lhs, rhs) => {
-                let lty = lhs.get_type()?;
-                let rty = rhs.get_type()?;
-                match (lty.clone(), rty.clone()) {
-                    (Type::Pointer(ty), _) | (_, Type::Pointer(ty)) => Some(Type::Pointer(Box::new(*ty))),
-                    (Type::Array(ty, _), _) | (_, Type::Array(ty, _)) => Some(Type::Pointer(Box::new(*ty))),
-                    _ => Some(Type::Int),
-                }
-            },
-            Expr::Infix(_, _, _) => Some(Type::Int),
-            Expr::Call(_, ty, _) => Some(ty.clone()),
-            Expr::BitNot(expr) => expr.get_type(),
-            Expr::Invalid | Expr::Initializer(_) => None,
+    pub fn new(kind: ExprKind) -> Self {
+        Self {
+            kind,
+            ty: None,
         }
+    }
+
+    pub fn with_type(kind: ExprKind, ty: Type) -> Self {
+        Self {
+            kind,
+            ty: Some(ty),
+        }
+    }
+
+    pub fn ty(&self) -> Type {
+        self.ty.clone().unwrap()
     }
 }
 
@@ -122,23 +119,8 @@ pub enum Stmt {
 }
 
 #[derive(Debug)]
-pub struct Function {
-    return_type: Type,
-    args: Vec<Variable>,
-}
-
-impl Function {
-    pub fn new(return_type: Type, args: Vec<Variable>) -> Self {
-        Function {
-            return_type,
-            args,
-        }
-    }
-}
-
-#[derive(Debug)]
 pub enum Declaration {
-    Func(String, Vec<Variable>, usize, Stmt), // 関数名, 引数の数, スタックのサイズ, 処理
+    Func(String, Type, Vec<Variable>, usize, Stmt), // 関数名, 戻り値の型, 引数, スタックのサイズ, 処理
     GlobalVariable(Variable, Option<Expr>), // 変数名, 変数, 初期化式
 }
 
@@ -164,7 +146,6 @@ pub struct Parser {
     global_variables: HashMap<String, Variable>,
     string_list: Vec<String>,
     variables: HashMap<String, Variable>,
-    functions: HashMap<String, Function>,
     tokens: Vec<Token>,
     pos: usize,
     stack_size: usize,
@@ -187,7 +168,6 @@ impl Parser {
             global_variables: HashMap::new(),
             string_list: Vec::new(),
             variables: HashMap::new(),
-            functions: HashMap::new(),
             stack_size: 0,
         }
     }
@@ -223,7 +203,7 @@ impl Parser {
 
     fn invalid_expr(&mut self, msg: &str, offset: i32) -> Expr {
         self.add_error_token(msg, (self.pos as i32 + offset) as usize);
-        Expr::Invalid
+        Expr::new(ExprKind::Invalid)
     }
 
     fn get_token(&mut self) -> TokenKind {
@@ -335,7 +315,7 @@ impl Parser {
 
     fn parse_string(&mut self, s: String) -> Expr {
         self.string_list.push(s);
-        Expr::Literal(Literal::String(self.string_list.len() - 1))
+        Expr::new(ExprKind::Literal(Literal::String(self.string_list.len() - 1)))
     }
 
     fn parse_call(&mut self, ident: String) -> Expr {
@@ -353,17 +333,13 @@ impl Parser {
             expect!(self, TokenKind::Comma);
         }
 
-        match self.functions.get(&ident) {
-            Some(func) => Expr::Call(ident, func.return_type.clone(), args),
-            // 関数が見つからなかったら戻り値の型をintとする
-            None => Expr::Call(ident, Type::Int, args),
-        }
+        Expr::new(ExprKind::Call(ident, args))
     }
 
     fn parse_var(&mut self, ident: String) -> Expr {
         // 変数マップから探す
         match (self.variables.get(&ident), self.global_variables.get(&ident)) {
-            (Some(variable), _) | (_, Some(variable)) => Expr::Variable(variable.clone()),
+            (Some(variable), _) | (_, Some(variable)) => Expr::new(ExprKind::Variable(variable.clone())),
             _ => self.invalid_expr(&format!("変数 \"{}\" が見つかりません", ident), -1),
         }
     }
@@ -391,7 +367,7 @@ impl Parser {
                 expect!(self, TokenKind::Rparen);
                 expr
             },
-            TokenKind::Number(num) => Expr::Literal(Literal::Number(num)),
+            TokenKind::Number(num) => Expr::new(ExprKind::Literal(Literal::Number(num))),
             TokenKind::String(s) => self.parse_string(s),
             _ => self.invalid_expr("数値でも開きカッコでもないトークンです", 0),
         }
@@ -404,7 +380,7 @@ impl Parser {
         loop {
             if self.consume(TokenKind::Lbracket) {
                 let index = self.parse_expr();
-                expr = Expr::Dereference(Box::new(Expr::Infix(Infix::Add, Box::new(expr), Box::new(index))));
+                expr = Expr::new(ExprKind::Dereference(Box::new(Expr::new(ExprKind::Infix(Infix::Add, Box::new(expr), Box::new(index))))));
                 expect!(self, TokenKind::Rbracket);
             } else {
                 break;
@@ -416,31 +392,24 @@ impl Parser {
 
     fn parse_unary_minus(&mut self) -> Expr {
         // 0 - n にする
-        Expr::Infix(Infix::Sub, Box::new(Expr::Literal(Literal::Number(0))), Box::new(self.parse_postfix()))
+        Expr::new(ExprKind::Infix(Infix::Sub,
+            Box::new(Expr::new(ExprKind::Literal(Literal::Number(0)))),
+            Box::new(self.parse_postfix())))
     }
 
     fn parse_unary_sizeof(&mut self) -> Expr {
-        let expr = self.parse_unary();
-        let ty = expr.get_type();
-        match ty {
-            Some(ty) => Expr::Literal(Literal::Number(ty.get_size() as i32)),
-            None => self.invalid_expr("型を識別できませんでした", 0),
-        }
+        Expr::new(ExprKind::SizeOf(Box::new(self.parse_unary())))
     }
 
     fn parse_unary_deref(&mut self) -> Expr {
-        let expr = self.parse_unary();
-        match expr.get_type() {
-            Some(Type::Pointer(_)) => Expr::Dereference(Box::new(expr)),
-            _ => self.invalid_expr("ポインタではない値を参照外しすることはできません", 0),
-        }
+        Expr::new(ExprKind::Dereference(Box::new(self.parse_unary())))
     }
 
     fn parse_unary_address(&mut self) -> Expr {
         let ident = self.expect_ident();
         if let Some(ident) = ident {
             match (self.variables.get(&ident), self.global_variables.get(&ident)) {
-                (Some(variable), _) | (_, Some(variable)) => Expr::Address(variable.clone()),
+                (Some(variable), _) | (_, Some(variable)) => Expr::new(ExprKind::Address(variable.clone())),
                 _ => self.invalid_expr(&format!("変数 \"{}\" が見つかりません", ident), -1),
             }
         } else {
@@ -455,7 +424,7 @@ impl Parser {
             TokenKind::SizeOf => self.parse_unary_sizeof(),
             TokenKind::Asterisk => self.parse_unary_deref(),
             TokenKind::Ampersand => self.parse_unary_address(),
-            TokenKind::BitNot => Expr::BitNot(Box::new(self.parse_postfix())),
+            TokenKind::BitNot => Expr::new(ExprKind::BitNot(Box::new(self.parse_postfix()))),
             _ => {
                 self.pos -= 1;
                 self.parse_postfix()
@@ -468,11 +437,11 @@ impl Parser {
 
         loop {
             if self.consume(TokenKind::Asterisk) {
-                expr = Expr::Infix(Infix::Mul, Box::new(expr), Box::new(self.parse_unary()));
+                expr = Expr::new(ExprKind::Infix(Infix::Mul, Box::new(expr), Box::new(self.parse_unary())));
             } else if self.consume(TokenKind::Div) {
-                expr = Expr::Infix(Infix::Div, Box::new(expr), Box::new(self.parse_unary()));
+                expr = Expr::new(ExprKind::Infix(Infix::Div, Box::new(expr), Box::new(self.parse_unary())));
             } else if self.consume(TokenKind::Mod) {
-                expr = Expr::Infix(Infix::Mod, Box::new(expr), Box::new(self.parse_unary()));
+                expr = Expr::new(ExprKind::Infix(Infix::Mod, Box::new(expr), Box::new(self.parse_unary())));
             } else {
                 return expr;
             }
@@ -484,9 +453,9 @@ impl Parser {
 
         loop {
             if self.consume(TokenKind::Add) {
-                expr = Expr::Infix(Infix::Add, Box::new(expr), Box::new(self.parse_mul()));
+                expr = Expr::new(ExprKind::Infix(Infix::Add, Box::new(expr), Box::new(self.parse_mul())));
             } else if self.consume(TokenKind::Sub) {
-                expr = Expr::Infix(Infix::Sub, Box::new(expr), Box::new(self.parse_mul()));
+                expr = Expr::new(ExprKind::Infix(Infix::Sub, Box::new(expr), Box::new(self.parse_mul())));
             } else {
                 return expr;
             }
@@ -498,9 +467,9 @@ impl Parser {
 
         loop {
             if self.consume(TokenKind::Shl) {
-                expr = Expr::Infix(Infix::Shl, Box::new(expr), Box::new(self.parse_add()));
+                expr = Expr::new(ExprKind::Infix(Infix::Shl, Box::new(expr), Box::new(self.parse_add())));
             } else if self.consume(TokenKind::Shr) {
-                expr = Expr::Infix(Infix::Shr, Box::new(expr), Box::new(self.parse_add()));
+                expr = Expr::new(ExprKind::Infix(Infix::Shr, Box::new(expr), Box::new(self.parse_add())));
             } else {
                 return expr;
             }
@@ -512,13 +481,13 @@ impl Parser {
 
         loop {
             if self.consume(TokenKind::LessThan) {
-                expr = Expr::Infix(Infix::LessThan, Box::new(expr), Box::new(self.parse_shift()));
+                expr = Expr::new(ExprKind::Infix(Infix::LessThan, Box::new(expr), Box::new(self.parse_shift())));
             } else if self.consume(TokenKind::LessThanOrEqual) {
-                expr = Expr::Infix(Infix::LessThanOrEqual, Box::new(expr), Box::new(self.parse_shift()));
+                expr = Expr::new(ExprKind::Infix(Infix::LessThanOrEqual, Box::new(expr), Box::new(self.parse_shift())));
             } else if self.consume(TokenKind::GreaterThan) {
-                expr = Expr::Infix(Infix::LessThan, Box::new(self.parse_shift()), Box::new(expr));
+                expr = Expr::new(ExprKind::Infix(Infix::LessThan, Box::new(self.parse_shift()), Box::new(expr)));
             } else if self.consume(TokenKind::GreaterThanOrEqual) {
-                expr = Expr::Infix(Infix::LessThanOrEqual, Box::new(self.parse_shift()), Box::new(expr));
+                expr = Expr::new(ExprKind::Infix(Infix::LessThanOrEqual, Box::new(self.parse_shift()), Box::new(expr)));
             } else {
                 return expr;
             }
@@ -530,9 +499,9 @@ impl Parser {
 
         loop {
             if self.consume(TokenKind::Equal) {
-                expr = Expr::Infix(Infix::Equal, Box::new(expr), Box::new(self.parse_relational()));
+                expr = Expr::new(ExprKind::Infix(Infix::Equal, Box::new(expr), Box::new(self.parse_relational())));
             } else if self.consume(TokenKind::NotEqual) {
-                expr = Expr::Infix(Infix::NotEqual, Box::new(expr), Box::new(self.parse_relational()));
+                expr = Expr::new(ExprKind::Infix(Infix::NotEqual, Box::new(expr), Box::new(self.parse_relational())));
             } else {
                 return expr;
             }
@@ -542,7 +511,7 @@ impl Parser {
     fn parse_bit_and(&mut self) -> Expr {
         let mut expr = self.parse_equality();
         while self.consume(TokenKind::Ampersand) {
-            expr = Expr::Infix(Infix::BitAnd, Box::new(expr), Box::new(self.parse_equality()));
+            expr = Expr::new(ExprKind::Infix(Infix::BitAnd, Box::new(expr), Box::new(self.parse_equality())));
         }
         expr
     }
@@ -550,7 +519,7 @@ impl Parser {
     fn parse_bit_xor(&mut self) -> Expr {
         let mut expr = self.parse_bit_and();
         while self.consume(TokenKind::Xor) {
-            expr = Expr::Infix(Infix::BitXor, Box::new(expr), Box::new(self.parse_bit_and()));
+            expr = Expr::new(ExprKind::Infix(Infix::BitXor, Box::new(expr), Box::new(self.parse_bit_and())));
         }
         expr
     }
@@ -558,7 +527,7 @@ impl Parser {
     fn parse_bit_or(&mut self) -> Expr {
         let mut expr = self.parse_bit_xor();
         while self.consume(TokenKind::Or) {
-            expr = Expr::Infix(Infix::BitOr, Box::new(expr), Box::new(self.parse_bit_xor()));
+            expr = Expr::new(ExprKind::Infix(Infix::BitOr, Box::new(expr), Box::new(self.parse_bit_xor())));
         }
         expr
     }
@@ -566,7 +535,7 @@ impl Parser {
     fn parse_assign(&mut self) -> Expr {
         let mut expr = self.parse_bit_or();
         if self.consume(TokenKind::Assign) {
-            expr = Expr::Assign(Box::new(expr), Box::new(self.parse_assign()));
+            expr = Expr::new(ExprKind::Assign(Box::new(expr), Box::new(self.parse_assign())));
         }
 
         expr
@@ -605,7 +574,7 @@ impl Parser {
             expr_list
         };
 
-        Expr::Initializer(expr_list)
+        Expr::new(ExprKind::Initializer(expr_list))
     }
 
     fn parse_return_stmt(&mut self) -> Stmt {
@@ -761,15 +730,13 @@ impl Parser {
             }
         });
 
-        self.functions.insert(ident.clone(), Function::new(ty, self.variables.clone().into_iter().map(|(_, v)| v).collect()));
-
         let stmt = self.parse_stmt();
         match stmt {
             Stmt::Block(_) => {},
             _ => self.add_error("ブロックではありません"),
         };
 
-        Declaration::Func(ident, args, self.stack_size, stmt)
+        Declaration::Func(ident, ty, args, self.stack_size, stmt)
     }
 
     fn parse_global_var_decl(&mut self, ty: Type, ident: String) -> Option<Declaration> {

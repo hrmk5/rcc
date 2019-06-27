@@ -3,6 +3,7 @@
 mod tokenizer;
 mod parser;
 mod gen;
+mod sema;
 
 use std::env;
 use std::process;
@@ -60,7 +61,7 @@ fn main() {
     }
 
     let mut parser = Parser::new(tokenizer.tokens);
-    let program = parser.parse();
+    let mut program = parser.parse();
     if parser.errors.len() > 0 {
         for error in parser.errors {
             let line = (error.start_line + 1).to_string();
@@ -73,6 +74,8 @@ fn main() {
     if let ShowType::Program = show_type {
         println!("{:?}", program);
     }
+
+    sema::walk(&mut program);
 
     let mut generator = Generator::new();
     generator.gen(program);
