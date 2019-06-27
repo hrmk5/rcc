@@ -1,4 +1,4 @@
-use crate::parser::*;
+use crate::ast::*;
 
 pub struct Generator {
     pub code: String,

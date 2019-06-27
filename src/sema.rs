@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::mem;
-use crate::parser::*;
+use crate::ast::*;
 
 struct Function {
     return_type: Type,
