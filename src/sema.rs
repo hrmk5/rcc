@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::mem;
-use crate::parser::{Program, Declaration, Stmt, Expr, Type, ExprKind, Literal, Infix};
+use crate::parser::*;
 
 struct Function {
     return_type: Type,
@@ -79,15 +79,20 @@ impl Analyzer {
                 self.functions.get(name).map_or(Type::Int, |func| func.return_type.clone())
             },
             ExprKind::BitNot(expr) => self.get_type(expr),
-            ExprKind::Initializer(expr_list) => {
-                for expr in &mut expr_list.clone() {
-                    self.walk_expr(expr);
-                }
-                Type::Array(Box::new(self.get_type(&mut expr_list[0])), 0)
-            },
             ExprKind::Invalid => panic!("Unexpected invalid expression"),
             ExprKind::SizeOf(_) => panic!("Unexpected sizeof unary operator"),
         });
+    }
+
+    fn walk_initializer(&mut self, initializer: &mut Initializer) {
+        match initializer {
+            Initializer::List(initializers) => {
+                for initializer in initializers {
+                    self.walk_initializer(initializer);
+                }
+            },
+            Initializer::Expr(expr) => self.walk_expr(expr),
+        }
     }
 
     fn walk_stmt(&mut self, stmt: &mut Stmt) {
@@ -113,9 +118,9 @@ impl Analyzer {
             Stmt::Return(expr) => {
                 self.walk_expr(expr);
             },
-            Stmt::Define(_, init_expr) => {
-                if let Some(init_expr) = init_expr {
-                    self.walk_expr(init_expr);
+            Stmt::Define(_, initializer) => {
+                if let Some(initializer) = initializer {
+                    self.walk_initializer(initializer);
                 }
             },
             Stmt::Block(stmt_list) => {
@@ -133,7 +138,7 @@ impl Analyzer {
                 self.functions.insert(name.clone(), function);
                 self.walk_stmt(stmt);
             },
-            Declaration::GlobalVariable(_, Some(init_expr)) => self.walk_expr(init_expr),
+            Declaration::GlobalVariable(_, Some(init_expr)) => self.walk_initializer(init_expr),
             _ => {},
         };
     }

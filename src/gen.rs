@@ -1,4 +1,4 @@
-use crate::parser::{Program, Stmt, Expr, Literal, Infix, Declaration, Type, Location, Variable, ExprKind};
+use crate::parser::*;
 
 pub struct Generator {
     pub code: String,
@@ -316,7 +316,6 @@ impl Generator {
             ExprKind::Infix(kind, lhs, rhs) => self.gen_infix(kind, *lhs, *rhs),
             ExprKind::Call(name, args) => self.gen_call(name, args),
             ExprKind::BitNot(expr) => self.gen_bit_not(*expr),
-            ExprKind::Initializer(_) => panic!("unexpected initializer"),
             ExprKind::SizeOf(_) => panic!("unexpected sizeof unary operator"),
             ExprKind::Invalid => eprintln!("invalid expression"),
         };
@@ -402,30 +401,15 @@ impl Generator {
         add_label!(self, ".Lend", label_num);
     }
 
-    fn gen_define_stmt(&mut self, variable: Variable, init_expr: Option<Expr>) {
+    fn gen_define_stmt(&mut self, variable: Variable, initializer: Option<Initializer>) {
         let offset = match variable.location {
             Location::Local(offset) => offset,
             _ => panic!("ローカル変数ではありません"),
         };
 
         // 初期化式
-        if let Some(init_expr) = init_expr {
-            match init_expr.kind {
-                ExprKind::Initializer(_) => self.gen_initalizer(offset, &variable.ty, init_expr),
-                _ => {
-                    self.gen_expr(init_expr);
-                    add_mnemonic!(self, "pop rax");
-
-                    let size = match variable.ty {
-                        Type::Array(_, _) => 8,
-                        ty => ty.get_size(),
-                    };
-
-                    let register = self.get_size_register(size, "rax").unwrap();
-                    let size_str = self.get_size_str(size).unwrap();
-                    add_mnemonic!(self, "mov {} [rbp-{}], {}", size_str, offset, register);
-                }
-            };
+        if let Some(initializer) = initializer {
+            self.gen_initalizer(offset, &variable.ty, initializer);
         }
     }
 
@@ -452,40 +436,33 @@ impl Generator {
             Stmt::If(cond, if_stmt, else_stmt) => self.gen_if_stmt(cond, *if_stmt, else_stmt),
             Stmt::While(expr, stmt) => self.gen_while_stmt(expr, *stmt),
             Stmt::For(init, cond, loop_expr, stmt) => self.gen_for_stmt(init, cond, loop_expr, *stmt),
-            Stmt::Define(variable, init_expr) => self.gen_define_stmt(variable, init_expr),
+            Stmt::Define(variable, initializer) => self.gen_define_stmt(variable, initializer),
             Stmt::Block(stmt_list) => self.gen_block_stmt(stmt_list),
             _ => {},
         }
     }
 
-    fn gen_initalizer(&mut self, offset: usize, ty: &Type, expr: Expr) {
-        let (element_type, _) = match ty {
-            Type::Array(ty, size) => (ty.clone(), size),
-            _ => panic!("配列ではありません"),
-        };
+    fn gen_initalizer(&mut self, offset: usize, ty: &Type, initializer: Initializer) {
+        match initializer {
+            Initializer::List(initializers) => {
+                let element_type = match ty {
+                    Type::Array(ty, _) => ty,
+                    _ => panic!(),
+                };
 
-        match expr.kind {
-            ExprKind::Initializer(expr_list) => {
                 let mut i = 0;
-                for expr in expr_list {
+                for initializer in initializers {
                     let element_offset = offset - i * element_type.get_size();
-
-                    match expr.kind {
-                        ExprKind::Initializer(_) => {
-                            self.gen_initalizer(element_offset, &element_type, expr);
-                        },
-                        _ => {
-                            self.gen_expr(expr);
-                            let register = self.get_size_register(element_type.get_size(), "rax").unwrap();
-                            add_mnemonic!(self, "pop rax");
-                            add_mnemonic!(self, "mov [rbp-{}], {}", element_offset, register);
-                        },
-                    };
-
+                    self.gen_initalizer(element_offset, &element_type, initializer);
                     i += 1;
                 }
             },
-            _ => panic!(),
+            Initializer::Expr(expr) => {
+                self.gen_expr(expr);
+                let register = self.get_size_register(ty.get_size(), "rax").unwrap();
+                add_mnemonic!(self, "pop rax");
+                add_mnemonic!(self, "mov [rbp-{}], {}", offset, register);
+            },
         };
     }
 
@@ -519,49 +496,45 @@ impl Generator {
         // グローバル変数
         for declaration in declarations {
             match declaration {
-                Declaration::GlobalVariable(variable, init_expr) => {
+                Declaration::GlobalVariable(variable, initializer) => {
                     add_label!(self, global!(variable.clone()));
 
                     // 初期値
-                    self.gen_global_init_expr(&variable.ty, init_expr.clone());
+                    if let Some(initializer) = initializer {
+                        self.gen_global_initializer(&variable.ty, initializer.clone());
+                    } else {
+                        // 初期化式がない場合は0で初期化
+                        add_mnemonic!(self, ".zero {}", variable.ty.get_size());
+                    }
                 },
                 _ => {},
             };
         }
     }
 
-    fn gen_global_init_expr(&mut self, ty: &Type, init_expr: Option<Expr>) {
-        match (ty.clone(), init_expr.clone().map(|expr| expr.kind)) {
-            (Type::Int, Some(ExprKind::Literal(Literal::Number(num)))) => add_mnemonic!(self, ".int {}", num),
-            (Type::Int, None) => add_mnemonic!(self, ".int 0"),
-            (Type::Char, Some(ExprKind::Literal(Literal::Number(num)))) => add_mnemonic!(self, ".byte {}", num),
-            (Type::Char, None) => add_mnemonic!(self, ".byte 0"),
-            (Type::Pointer(_), None) => add_mnemonic!(self, ".long 0"),
-            (Type::Pointer(_), Some(ExprKind::Address(variable))) => add_mnemonic!(self, ".quad {}", global!(variable)),
+    fn gen_global_init_expr(&mut self, ty: &Type, init_expr: Expr) {
+        match (ty.clone(), init_expr.kind) {
+            (Type::Int, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".int {}", num),
+            (Type::Char, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".byte {}", num),
+            (Type::Pointer(_), ExprKind::Address(variable)) => add_mnemonic!(self, ".quad {}", global!(variable)),
             // TODO: ポインタ演算
-            (Type::Array(box Type::Char, _), Some(ExprKind::Literal(Literal::String(num)))) |
-                (Type::Pointer(box Type::Char), Some(ExprKind::Literal(Literal::String(num)))) => add_mnemonic!(self, ".quad .Ltext{}", num),
-            (Type::Array(_, _), Some(ExprKind::Initializer(_))) => self.gen_global_initializer(&ty, init_expr.unwrap()),
-            (Type::Array(ty, size), None) => add_mnemonic!(self, ".ascii \"{}\"", "\\0".repeat(ty.get_size()).repeat(size)),
-            _ => {},
+            (Type::Array(box Type::Char, _), ExprKind::Literal(Literal::String(num))) |
+            (Type::Pointer(box Type::Char), ExprKind::Literal(Literal::String(num))) => add_mnemonic!(self, ".quad .Ltext{}", num),
+            _ => panic!("サポートしていない初期化式です"),
         };
     }
 
-    fn gen_global_initializer(&mut self, ty: &Type, expr: Expr) {
-        let (element_type, size) = match ty {
-            Type::Array(ty, size) => (ty.clone(), size),
-            _ => panic!("配列ではありません"),
-        };
+    fn gen_global_initializer(&mut self, ty: &Type, initializer: Initializer) {
+        match initializer {
+            Initializer::List(initializers) => {
+                let (element_type, size) = match ty {
+                    Type::Array(ty, size) => (ty, size),
+                    _ => panic!(),
+                };
 
-        match expr.kind {
-            ExprKind::Initializer(expr_list) => {
                 let mut i = 0;
-                for expr in expr_list {
-                    if let ExprKind::Initializer(_) = expr.kind {
-                        self.gen_global_initializer(&element_type, expr);
-                    } else {
-                        self.gen_global_init_expr(&element_type, Some(expr));
-                    }
+                for initializer in initializers {
+                    self.gen_global_initializer(&element_type, initializer);
                     i += 1;
                 }
 
@@ -570,7 +543,9 @@ impl Generator {
                     add_mnemonic!(self, ".zero {}", padding);
                 }
             },
-            _ => panic!("gen_global_initializer"),
+            Initializer::Expr(expr) => {
+                self.gen_global_init_expr(ty, expr);
+            },
         };
     }
 

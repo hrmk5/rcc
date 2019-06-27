@@ -22,6 +22,27 @@ impl Type {
 }
 
 #[derive(Debug, Clone)]
+pub enum Location {
+    Local(usize), // rbpからのオフセット
+    Global(String), // ラベル
+}
+
+#[derive(Debug, Clone)]
+pub struct Variable {
+    pub ty: Type,
+    pub location: Location,
+}
+
+impl Variable {
+    pub fn new(ty: Type, location: Location) -> Self {
+        Self {
+            ty,
+            location,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Infix {
     Add,
     Sub,
@@ -45,26 +66,6 @@ pub enum Literal {
     String(usize),
 }
 
-#[derive(Debug, Clone)]
-pub enum Location {
-    Local(usize), // rbpからのオフセット
-    Global(String), // ラベル
-}
-
-#[derive(Debug, Clone)]
-pub struct Variable {
-    pub ty: Type,
-    pub location: Location,
-}
-
-impl Variable {
-    pub fn new(ty: Type, location: Location) -> Self {
-        Self {
-            ty,
-            location,
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub enum ExprKind {
@@ -75,7 +76,6 @@ pub enum ExprKind {
     Assign(Box<Expr>, Box<Expr>),
     Infix(Infix, Box<Expr>,  Box<Expr>),
     Call(String, Vec<Expr>),
-    Initializer(Vec<Expr>),
     BitNot(Box<Expr>),
     SizeOf(Box<Expr>),
     Invalid,
@@ -107,6 +107,12 @@ impl Expr {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum Initializer {
+    List(Vec<Initializer>),
+    Expr(Expr),
+}
+
 #[derive(Debug)]
 pub enum Stmt {
     Expr(Expr),
@@ -115,13 +121,13 @@ pub enum Stmt {
     While(Expr, Box<Stmt>),
     For(Option<Box<Stmt>>, Option<Expr>, Option<Expr>, Box<Stmt>),
     Block(Vec<Stmt>),
-    Define(Variable, Option<Expr>),
+    Define(Variable, Option<Initializer>),
 }
 
 #[derive(Debug)]
 pub enum Declaration {
     Func(String, Type, Vec<Variable>, usize, Stmt), // 関数名, 戻り値の型, 引数, スタックのサイズ, 処理
-    GlobalVariable(Variable, Option<Expr>), // 変数名, 変数, 初期化式
+    GlobalVariable(Variable, Option<Initializer>), // 変数名, 変数, 初期化式
 }
 
 #[derive(Debug)]
@@ -545,36 +551,32 @@ impl Parser {
         self.parse_assign()
     }
 
-    fn parse_initializer(&mut self) -> Expr {
-        // { を消費
-        self.consume(TokenKind::Lbrace);
+    fn parse_initializer(&mut self) -> Initializer {
+        // { だったら初期化リストとしてパース
+        if self.consume(TokenKind::Lbrace) {
+            let initializers: Vec<Initializer> = if self.consume(TokenKind::Rbrace) {
+                Vec::new()
+            } else {
+                let mut initializers = Vec::new();
+                loop {
+                    initializers.push(self.parse_initializer());
 
-        let expr_list: Vec<Expr> = if self.consume(TokenKind::Rbrace) {
-            Vec::new()
-        } else {
-            let mut expr_list = Vec::new();
-            loop {
-                let expr = if let TokenKind::Lbrace = self.tokens[self.pos].kind {
-                    self.parse_initializer()
-                } else {
-                    self.parse_expr()
-                };
+                    if self.consume(TokenKind::Rbrace) {
+                        break;
+                    } else if self.consume(TokenKind::EOF) {
+                        self.add_error("{ に対応する } がありません");
+                        break;
+                    }
 
-                expr_list.push(expr);
-
-                if self.consume(TokenKind::Rbrace) {
-                    break;
-                } else if self.consume(TokenKind::EOF) {
-                    self.add_error("{ に対応する } がありません");
-                    break;
+                    expect!(self, TokenKind::Comma);
                 }
+                initializers
+            };
 
-                expect!(self, TokenKind::Comma);
-            }
-            expr_list
-        };
-
-        Expr::new(ExprKind::Initializer(expr_list))
+            Initializer::List(initializers)
+        } else {
+            Initializer::Expr(self.parse_expr())
+        }
     }
 
     fn parse_return_stmt(&mut self) -> Stmt {
@@ -670,18 +672,14 @@ impl Parser {
         let variable = self.expect_define(false);
         if let Some(variable) = variable {
             // = があったら初期化式をパース
-            let init_expr = if self.consume(TokenKind::Assign) {
-                // { があったら初期化リストとしてパース
-                match self.get_token() {
-                    TokenKind::Lbrace => Some(self.parse_initializer()),
-                    _ => Some(self.parse_expr()),
-                }
+            let initializer = if self.consume(TokenKind::Assign) {
+                Some(self.parse_initializer())
             } else {
                 None
             };
 
             expect!(self, TokenKind::Semicolon);
-            Some(Stmt::Define(variable, init_expr))
+            Some(Stmt::Define(variable, initializer))
         } else {
             None
         }
@@ -747,12 +745,8 @@ impl Parser {
         }
 
         // = があったら初期化式をパース
-        let init_expr = if self.consume(TokenKind::Assign) {
-            // { があったら初期化リストとしてパース
-            match self.get_token() {
-                TokenKind::Lbrace => Some(self.parse_initializer()),
-                _ => Some(self.parse_add()),
-            }
+        let initializer = if self.consume(TokenKind::Assign) {
+            Some(self.parse_initializer())
         } else {
             None
         };
@@ -761,7 +755,7 @@ impl Parser {
 
         let variable = Variable::new(ty, Location::Global(ident.clone()));
         self.global_variables.insert(ident.clone(), variable.clone());
-        Some(Declaration::GlobalVariable(variable, init_expr))
+        Some(Declaration::GlobalVariable(variable, initializer))
     }
 
     pub fn parse_declaration(&mut self) -> Option<Declaration> {
