@@ -1,3 +1,5 @@
+use crate::error::Span;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Int,
@@ -81,36 +83,29 @@ pub enum ExprKind {
 pub struct Expr {
     pub kind: ExprKind,
     pub ty: Option<Type>,
+    pub span: Span,
 }
 
 impl Expr {
-    pub fn new(kind: ExprKind) -> Self {
-        Self {
-            kind,
-            ty: None,
-        }
-    }
-
-    pub fn with_type(kind: ExprKind, ty: Type) -> Self {
-        Self {
-            kind,
-            ty: Some(ty),
-        }
-    }
-
     pub fn ty(&self) -> Type {
         self.ty.clone().unwrap()
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum Initializer {
+pub enum InitializerKind {
     List(Vec<Initializer>),
     Expr(Expr),
 }
 
+#[derive(Debug, Clone)]
+pub struct Initializer {
+    pub kind: InitializerKind,
+    pub span: Span,
+}
+
 #[derive(Debug)]
-pub enum Stmt {
+pub enum StmtKind {
     Expr(Expr),
     Return(Expr),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
@@ -121,9 +116,21 @@ pub enum Stmt {
 }
 
 #[derive(Debug)]
-pub enum Declaration {
+pub struct Stmt {
+    pub kind: StmtKind,
+    pub span: Span,
+}
+
+#[derive(Debug)]
+pub enum DeclarationKind {
     Func(String, Type, Vec<Variable>, usize, Stmt), // 関数名, 戻り値の型, 引数, スタックのサイズ, 処理
     GlobalVariable(Variable, Option<Initializer>), // 変数名, 変数, 初期化式
+}
+
+#[derive(Debug)]
+pub struct Declaration {
+    pub kind: DeclarationKind,
+    pub span: Span,
 }
 
 #[derive(Debug)]

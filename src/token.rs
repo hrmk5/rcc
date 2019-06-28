@@ -85,7 +85,7 @@ impl ToString for TokenKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub start_line: usize,

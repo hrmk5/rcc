@@ -36,9 +36,11 @@ impl Analyzer {
         // sizeofは数値リテラルに置き換える
         if let ExprKind::SizeOf(inner_expr) = &mut expr.kind.clone() {
             self.get_type(inner_expr);
-            mem::replace(expr, Expr::with_type(
-                ExprKind::Literal(Literal::Number(inner_expr.ty().get_size() as i32)),
-                Type::Int));
+            mem::replace(expr, Expr {
+                kind: ExprKind::Literal(Literal::Number(inner_expr.ty().get_size() as i32)),
+                ty: Some(Type::Int),
+                span: inner_expr.span.clone(),
+            });
             return;
         }
 
@@ -85,45 +87,45 @@ impl Analyzer {
     }
 
     fn walk_initializer(&mut self, initializer: &mut Initializer) {
-        match initializer {
-            Initializer::List(initializers) => {
+        match &mut initializer.kind {
+            InitializerKind::List(initializers) => {
                 for initializer in initializers {
                     self.walk_initializer(initializer);
                 }
             },
-            Initializer::Expr(expr) => self.walk_expr(expr),
+            InitializerKind::Expr(expr) => self.walk_expr(expr),
         }
     }
 
     fn walk_stmt(&mut self, stmt: &mut Stmt) {
-        match stmt {
-            Stmt::Expr(expr) => self.walk_expr(expr),
-            Stmt::If(cond, stmt, else_stmt) => {
+        match &mut stmt.kind {
+            StmtKind::Expr(expr) => self.walk_expr(expr),
+            StmtKind::If(cond, stmt, else_stmt) => {
                 self.walk_expr(cond);
                 self.walk_stmt(stmt);
                 if let Some(else_stmt) = else_stmt {
                     self.walk_stmt(else_stmt);
                 }
             },
-            Stmt::For(init_stmt, cond, loop_expr, stmt) => {
+            StmtKind::For(init_stmt, cond, loop_expr, stmt) => {
                 if let Some(stmt) = init_stmt { self.walk_stmt(stmt) };
                 if let Some(cond) = cond { self.walk_expr(cond) };
                 if let Some(stmt) = loop_expr { self.walk_expr(stmt) };
                 self.walk_stmt(stmt);
             },
-            Stmt::While(cond, stmt) => {
+            StmtKind::While(cond, stmt) => {
                 self.walk_expr(cond);
                 self.walk_stmt(stmt);
             },
-            Stmt::Return(expr) => {
+            StmtKind::Return(expr) => {
                 self.walk_expr(expr);
             },
-            Stmt::Define(_, initializer) => {
+            StmtKind::Define(_, initializer) => {
                 if let Some(initializer) = initializer {
                     self.walk_initializer(initializer);
                 }
             },
-            Stmt::Block(stmt_list) => {
+            StmtKind::Block(stmt_list) => {
                 for stmt in stmt_list {
                     self.walk_stmt(stmt);
                 }
@@ -132,13 +134,13 @@ impl Analyzer {
     }
 
     fn walk_declaration(&mut self, declaration: &mut Declaration) {
-        match declaration {
-            Declaration::Func(name, ty, args, _, stmt) => {
+        match &mut declaration.kind {
+            DeclarationKind::Func(name, ty, args, _, stmt) => {
                 let function = Function::new(ty.clone(), args.clone().into_iter().map(|var| var.ty).collect());
                 self.functions.insert(name.clone(), function);
                 self.walk_stmt(stmt);
             },
-            Declaration::GlobalVariable(_, Some(init_expr)) => self.walk_initializer(init_expr),
+            DeclarationKind::GlobalVariable(_, Some(init_expr)) => self.walk_initializer(init_expr),
             _ => {},
         };
     }

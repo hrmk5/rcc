@@ -415,8 +415,8 @@ impl Generator {
 
     fn gen_block_stmt(&mut self, stmt_list: Vec<Stmt>) {
         for stmt in stmt_list {
-            let must_pop = match stmt {
-                Stmt::Return(_) | Stmt::Define(_, _) => false,
+            let must_pop = match stmt.kind {
+                StmtKind::Return(_) | StmtKind::Define(_, _) => false,
                 _ => true,
             };
 
@@ -430,21 +430,21 @@ impl Generator {
 
     fn gen_stmt(&mut self, stmt: Stmt) {
         #[allow(unreachable_patterns)]
-        match stmt {
-            Stmt::Expr(expr) => self.gen_expr(expr),
-            Stmt::Return(expr) => self.gen_return_stmt(expr),
-            Stmt::If(cond, if_stmt, else_stmt) => self.gen_if_stmt(cond, *if_stmt, else_stmt),
-            Stmt::While(expr, stmt) => self.gen_while_stmt(expr, *stmt),
-            Stmt::For(init, cond, loop_expr, stmt) => self.gen_for_stmt(init, cond, loop_expr, *stmt),
-            Stmt::Define(variable, initializer) => self.gen_define_stmt(variable, initializer),
-            Stmt::Block(stmt_list) => self.gen_block_stmt(stmt_list),
+        match stmt.kind {
+            StmtKind::Expr(expr) => self.gen_expr(expr),
+            StmtKind::Return(expr) => self.gen_return_stmt(expr),
+            StmtKind::If(cond, if_stmt, else_stmt) => self.gen_if_stmt(cond, *if_stmt, else_stmt),
+            StmtKind::While(expr, stmt) => self.gen_while_stmt(expr, *stmt),
+            StmtKind::For(init, cond, loop_expr, stmt) => self.gen_for_stmt(init, cond, loop_expr, *stmt),
+            StmtKind::Define(variable, initializer) => self.gen_define_stmt(variable, initializer),
+            StmtKind::Block(stmt_list) => self.gen_block_stmt(stmt_list),
             _ => {},
         }
     }
 
     fn gen_initalizer(&mut self, offset: usize, ty: &Type, initializer: Initializer) {
-        match initializer {
-            Initializer::List(initializers) => {
+        match initializer.kind {
+            InitializerKind::List(initializers) => {
                 let element_type = match ty {
                     Type::Array(ty, _) => ty,
                     _ => panic!(),
@@ -457,7 +457,7 @@ impl Generator {
                     i += 1;
                 }
             },
-            Initializer::Expr(expr) => {
+            InitializerKind::Expr(expr) => {
                 self.gen_expr(expr);
                 let register = self.get_size_register(ty.get_size(), "rax").unwrap();
                 add_mnemonic!(self, "pop rax");
@@ -467,8 +467,8 @@ impl Generator {
     }
 
     pub fn gen_declaration(&mut self, declaration: Declaration) {
-        match declaration {
-            Declaration::Func(name, _, args, stack_size, block) => {
+        match declaration.kind {
+            DeclarationKind::Func(name, _, args, stack_size, block) => {
                 add_label!(self, &name);
 
                 add_mnemonic!(self, "push rbp");
@@ -495,8 +495,8 @@ impl Generator {
         self.code.push_str(".data\n");
         // グローバル変数
         for declaration in declarations {
-            match declaration {
-                Declaration::GlobalVariable(variable, initializer) => {
+            match &declaration.kind {
+                DeclarationKind::GlobalVariable(variable, initializer) => {
                     add_label!(self, global!(variable.clone()));
 
                     // 初期値
@@ -525,8 +525,8 @@ impl Generator {
     }
 
     fn gen_global_initializer(&mut self, ty: &Type, initializer: Initializer) {
-        match initializer {
-            Initializer::List(initializers) => {
+        match initializer.kind {
+            InitializerKind::List(initializers) => {
                 let (element_type, size) = match ty {
                     Type::Array(ty, size) => (ty, size),
                     _ => panic!(),
@@ -543,7 +543,7 @@ impl Generator {
                     add_mnemonic!(self, ".zero {}", padding);
                 }
             },
-            Initializer::Expr(expr) => {
+            InitializerKind::Expr(expr) => {
                 self.gen_global_init_expr(ty, expr);
             },
         };

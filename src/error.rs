@@ -1,3 +1,5 @@
+use crate::token::Token;
+
 #[derive(Debug, Clone)]
 pub struct Span {
     pub start_line: usize,
@@ -13,6 +15,15 @@ impl Span {
             start_col,
             end_line,
             end_col,
+        }
+    }
+
+    pub fn from_two_token(start: &Token, end: &Token) -> Self {
+        Self {
+            start_line: start.start_line,
+            start_col: start.start_col,
+            end_line: end.end_line,
+            end_col: end.end_col,
         }
     }
 }
