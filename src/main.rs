@@ -5,6 +5,7 @@ mod parser;
 mod gen;
 mod sema;
 mod ast;
+mod error;
 mod token;
 
 use std::env;
@@ -14,12 +15,21 @@ use std::io::Read;
 use tokenizer::Tokenizer;
 use parser::Parser;
 use gen::Generator;
+use error::CompileError;
 use colored::*;
 
 enum ShowType {
     Token,
     Program,
     Code,
+}
+
+fn print_error(lines: &Vec<&str>, errors: &Vec<CompileError>) {
+    for error in errors {
+        let line = (error.span.start_line + 1).to_string();
+        println!("{} {}", format!("{} |", line).bright_cyan(), lines[error.span.start_line]);
+        println!("{}{} {}", " ".repeat(error.span.start_col + line.chars().count() + 3).bright_red(), "^".repeat(error.span.end_col - error.span.start_col).bright_red(), error.msg.bright_red());
+    }
 }
 
 fn main() {
@@ -45,33 +55,30 @@ fn main() {
         _ => ShowType::Code,
     };
 
-    let mut tokenizer = Tokenizer::new(&input);
-    tokenizer.tokenize();
-    if tokenizer.errors.len() > 0 {
-        for error in tokenizer.errors {
-            let line = (error.line + 1).to_string();
-            println!("{} {}", format!("{} |", line).bright_cyan(), lines[error.line]);
-            println!("{}^ {}", " ".repeat(error.col + line.chars().count() + 3).bright_red(), error.message.bright_red());
-        }
-        process::exit(1);
-    }
+    let tokenizer = Tokenizer::new(&input);
+    let tokens = match tokenizer.tokenize() {
+        Ok(tokens) => tokens,
+        Err(errors) => {
+            print_error(&lines, &errors);
+            process::exit(1);
+        },
+    };
 
     if let ShowType::Token = show_type {
-        for token in &tokenizer.tokens {
+        for token in tokens {
             println!("{:?}", token);
-        }
-    }
-
-    let mut parser = Parser::new(tokenizer.tokens);
-    let mut program = parser.parse();
-    if parser.errors.len() > 0 {
-        for error in parser.errors {
-            let line = (error.start_line + 1).to_string();
-            println!("{} {}", format!("{} |", line).bright_cyan(), lines[error.start_line]);
-            println!("{}{} {}", " ".repeat(error.start_col + line.chars().count() + 3).bright_red(), "^".repeat(error.end_col - error.start_col).bright_red(), error.message.bright_red());
         }
         process::exit(1);
     }
+
+    let parser = Parser::new(tokens);
+    let mut program = match parser.parse() {
+        Ok(program) => program,
+        Err(errors) => {
+            print_error(&lines, &errors);
+            process::exit(1);
+        }
+    };
 
     if let ShowType::Program = show_type {
         println!("{:?}", program);

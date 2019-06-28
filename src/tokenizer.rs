@@ -1,16 +1,10 @@
 use crate::token::*;
-
-#[derive(Debug)]
-pub struct TokenizeError {
-    pub line: usize,
-    pub col: usize,
-    pub message: String,
-}
+use crate::error::{CompileError, Span};
 
 #[derive(Debug)]
 pub struct Tokenizer {
     pub tokens: Vec<Token>,
-    pub errors: Vec<TokenizeError>,
+    pub errors: Vec<CompileError>,
     input: Vec<char>,
     pos: usize,
     ch: char,
@@ -41,10 +35,9 @@ impl Tokenizer {
     }
 
     fn add_error(&mut self, msg: &str) {
-        self.errors.push(TokenizeError {
-            line: self.line,
-            col: self.col,
-            message: String::from(msg),
+        self.errors.push(CompileError {
+            span: Span::new(self.line, self.col, self.line, self.col),
+            msg: msg.to_string(),
         });
     }
 
@@ -174,7 +167,7 @@ impl Tokenizer {
         }
     }
 
-    pub fn tokenize(&mut self) {
+    pub fn tokenize(mut self) -> Result<Vec<Token>, Vec<CompileError>> {
         loop {
             self.skip_whitespace();
 
@@ -227,5 +220,11 @@ impl Tokenizer {
         }
 
         self.add_token(TokenKind::EOF, self.col, self.col);
+
+        if self.errors.len() > 0 {
+            Err(self.errors)
+        } else {
+            Ok(self.tokens)
+        }
     }
 }

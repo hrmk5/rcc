@@ -3,19 +3,11 @@ use std::convert::TryInto;
 
 use crate::token::*;
 use crate::ast::*;
-
-#[derive(Debug)]
-pub struct ParseError {
-    pub start_line: usize,
-    pub start_col: usize,
-    pub end_line: usize,
-    pub end_col: usize,
-    pub message: String,
-}
+use crate::error::{CompileError, Span};
 
 #[derive(Debug)]
 pub struct Parser {
-    pub errors: Vec<ParseError>,
+    pub errors: Vec<CompileError>,
     global_variables: HashMap<String, Variable>,
     string_list: Vec<String>,
     variables: HashMap<String, Variable>,
@@ -57,12 +49,9 @@ impl Parser {
     fn add_error_range(&mut self, msg: &str, start_pos: usize, end_pos: usize) {
         let start_token = &self.tokens[start_pos];
         let end_token = &self.tokens[end_pos];
-        self.errors.push(ParseError {
-            start_line: start_token.start_line,
-            start_col: start_token.start_col,
-            end_line: end_token.end_line,
-            end_col: end_token.end_col,
-            message: String::from(msg),
+        self.errors.push(CompileError {
+            span: Span::new(start_token.start_line, start_token.start_col, end_token.end_line, end_token.end_col),
+            msg: msg.to_string(),
         });
     }
 
@@ -649,7 +638,7 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Program {
+    pub fn parse(mut self) -> Result<Program, Vec<CompileError>> {
         let mut declarations = Vec::new();
         while self.tokens[self.pos].kind != TokenKind::EOF {
             if let Some(declaration) = self.parse_declaration() {
@@ -657,10 +646,14 @@ impl Parser {
             }
         }
 
-        Program {
-            declarations,
-            global_variables: self.global_variables.clone().into_iter().map(|(_, v)| v).collect(),
-            string_list: self.string_list.clone(),
+        if self.errors.is_empty() {
+            Ok(Program {
+                declarations,
+                global_variables: self.global_variables.clone().into_iter().map(|(_, v)| v).collect(),
+                string_list: self.string_list.clone(),
+            })
+        } else {
+            Err(self.errors)
         }
     }
 }
