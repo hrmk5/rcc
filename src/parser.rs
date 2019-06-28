@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::convert::TryInto;
 
-use crate::tokenizer::{Token, TokenKind};
+use crate::token::*;
 use crate::ast::*;
 
 #[derive(Debug)]

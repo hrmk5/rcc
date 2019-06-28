@@ -5,6 +5,7 @@ mod parser;
 mod gen;
 mod sema;
 mod ast;
+mod token;
 
 use std::env;
 use std::process;
