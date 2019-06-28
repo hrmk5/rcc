@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::mem;
 use crate::ast::*;
+use crate::error::{CompileError, Span};
 
 struct Function {
     return_type: Type,
@@ -18,13 +19,22 @@ impl Function {
 
 struct Analyzer {
     functions: HashMap<String, Function>,
+    errors: Vec<CompileError>,
 }
 
 impl Analyzer {
     fn new() -> Self {
         Self {
             functions: HashMap::new(),
+            errors: Vec::new(),
         }
+    }
+
+    fn add_error(&mut self, msg: &str, span: &Span) {
+        self.errors.push(CompileError {
+            msg: msg.to_string(),
+            span: span.clone(),
+        });
     }
 
     fn get_type(&mut self, expr: &mut Expr) -> Type {
@@ -138,21 +148,33 @@ impl Analyzer {
             DeclarationKind::Func(name, ty, args, _, stmt) => {
                 let function = Function::new(ty.clone(), args.clone().into_iter().map(|var| var.ty).collect());
                 self.functions.insert(name.clone(), function);
-                self.walk_stmt(stmt);
+
+                // 本体がブロックではない場合はエラー
+                if let StmtKind::Block(_) = stmt.kind {
+                    self.walk_stmt(stmt);
+                } else {
+                    self.add_error("関数の本体がブロックではありません", &stmt.span);
+                }
             },
             DeclarationKind::GlobalVariable(_, Some(init_expr)) => self.walk_initializer(init_expr),
             _ => {},
         };
     }
 
-    fn walk(&mut self, program: &mut Program) {
+    fn walk(mut self, program: &mut Program) -> Result<(), Vec<CompileError>> {
         for declaration in &mut program.declarations {
             self.walk_declaration(declaration);
+        }
+
+        if self.errors.is_empty() {
+            Ok(())
+        } else {
+            Err(self.errors)
         }
     }
 }
 
-pub fn walk(program: &mut Program) {
-    let mut analyzer = Analyzer::new();
-    analyzer.walk(program);
+pub fn walk(program: &mut Program) -> Result<(), Vec<CompileError>> {
+    let analyzer = Analyzer::new();
+    analyzer.walk(program)
 }

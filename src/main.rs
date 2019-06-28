@@ -84,7 +84,10 @@ fn main() {
         println!("{:?}", program);
     }
 
-    sema::walk(&mut program);
+    if let Err(errors) = sema::walk(&mut program) {
+        print_error(&lines, &errors);
+        process::exit(1);
+    }
 
     let mut generator = Generator::new();
     generator.gen(program);
