@@ -18,6 +18,15 @@ impl Span {
         }
     }
 
+    pub fn from_token(token: &Token) -> Self {
+        Self {
+            start_line: token.start_line,
+            start_col: token.start_col,
+            end_line: token.end_line,
+            end_col: token.end_col,
+        }
+    }
+
     pub fn from_two_token(start: &Token, end: &Token) -> Self {
         Self {
             start_line: start.start_line,

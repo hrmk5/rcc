@@ -69,11 +69,6 @@ impl Tokenizer {
         loop {
             match self.ch {
                 ' ' | '\t' | '\r' => self.next(),
-                '\n' => {
-                    self.next();
-                    self.line += 1;
-                    self.col = 0;
-                },
                 _ => break,
             }
         }
@@ -214,6 +209,12 @@ impl Tokenizer {
                 '^' => self.add_token_and_skip(TokenKind::Xor, 1),
                 '~' => self.add_token_and_skip(TokenKind::BitNot, 1),
                 '%' => self.add_token_and_skip(TokenKind::Mod, 1),
+                '#' => self.add_token_and_skip(TokenKind::Hash, 1),
+                '\n' => {
+                    self.line += 1;
+                    self.col = 0;
+                    self.add_token_and_skip(TokenKind::NewLine, 1);
+                },
                 '\0' => break,
                 _ => { self.add_error("Unexpected token"); self.next() },
             }

@@ -38,6 +38,8 @@ pub enum TokenKind {
     Mod,
     Shl,
     Shr,
+    Hash,
+    NewLine,
 }
 
 impl ToString for TokenKind {
@@ -81,6 +83,8 @@ impl ToString for TokenKind {
             TokenKind::Mod => "%",
             TokenKind::Shl => "<<",
             TokenKind::Shr => ">>",
+            TokenKind::Hash => "#",
+            TokenKind::NewLine => "\\n",
         })
     }
 }

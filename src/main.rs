@@ -1,4 +1,4 @@
-#![feature(box_patterns)]
+#![feature(box_patterns, bind_by_move_pattern_guards)]
 
 mod tokenizer;
 mod parser;
@@ -7,6 +7,7 @@ mod sema;
 mod ast;
 mod error;
 mod token;
+mod preprocess;
 
 use std::env;
 use std::process;
@@ -16,11 +17,13 @@ use tokenizer::Tokenizer;
 use parser::Parser;
 use gen::Generator;
 use error::CompileError;
+use preprocess::preprocess;
 use colored::*;
 
 enum ShowType {
     Token,
     Program,
+    Preprocess,
     Code,
 }
 
@@ -50,11 +53,13 @@ fn main() {
         Some(s) => match &s[..] {
             "token" => ShowType::Token,
             "program" => ShowType::Program,
+            "preprocess" => ShowType::Preprocess,
             _ => ShowType::Code,
         },
         _ => ShowType::Code,
     };
 
+    // 字句解析
     let tokenizer = Tokenizer::new(&input);
     let tokens = match tokenizer.tokenize() {
         Ok(tokens) => tokens,
@@ -71,6 +76,23 @@ fn main() {
         process::exit(1);
     }
 
+    // プリプロセス
+    let tokens = match preprocess(tokens) {
+        Ok(tokens) => tokens,
+        Err(errors) => {
+            print_error(&lines, &errors);
+            process::exit(1);
+        },
+    };
+
+    if let ShowType::Preprocess = show_type {
+        for token in tokens {
+            println!("{:?}", token);
+        }
+        process::exit(1);
+    }
+
+    // 構文解析
     let parser = Parser::new(tokens);
     let mut program = match parser.parse() {
         Ok(program) => program,
@@ -84,11 +106,13 @@ fn main() {
         println!("{:?}", program);
     }
 
+    // 意味解析
     if let Err(errors) = sema::walk(&mut program) {
         print_error(&lines, &errors);
         process::exit(1);
     }
 
+    // コード生成
     let mut generator = Generator::new();
     generator.gen(program);
 
