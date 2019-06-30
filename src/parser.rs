@@ -11,6 +11,7 @@ pub struct Parser {
     global_variables: HashMap<String, Variable>,
     string_list: Vec<String>,
     variables: HashMap<String, Variable>,
+    structures: HashMap<String, Type>,
     tokens: Vec<Token>,
     pos: usize,
     stack_size: usize,
@@ -87,6 +88,7 @@ impl Parser {
             global_variables: HashMap::new(),
             string_list: Vec::new(),
             variables: HashMap::new(),
+            structures: HashMap::new(),
             stack_size: 0,
             start_token_stack: Vec::new(),
         }
@@ -233,47 +235,81 @@ impl Parser {
         }
     }
 
-    fn parse_type_struct(&mut self) -> Type {
+    fn parse_type_struct(&mut self) -> Option<Type> {
         // "struct" を消費
         self.pos += 1;
-        expect!(self, TokenKind::Lbrace);
 
-        let mut members = HashMap::new();
+        // 名前
+        let name = if let TokenKind::Ident(ref name) = self.tokens[self.pos].kind {
+            self.pos += 1;
+            Some(name.clone())
+        } else {
+            None
+        };
 
-        loop {
-            if self.consume(TokenKind::Rbrace) {
-                break;
-            }
+        if self.consume(TokenKind::Lbrace) {
+            // '{' だったら定義
+            let mut members = HashMap::new();
 
-            if let Some(ty) = self.expect_type() {
-                if let Some(ident) = self.expect_ident() {
-                    members.insert(ident, ty);
-                } else {
-                    self.add_error("メンバ名ではありません");
+            loop {
+                if self.consume(TokenKind::Rbrace) {
+                    break;
                 }
+
+                if let Some(ty) = self.expect_type() {
+                    if let Some(ident) = self.expect_ident() {
+                        members.insert(ident, ty);
+                    } else {
+                        self.add_error("メンバ名ではありません");
+                    }
+                } else {
+                    self.add_error("型ではありません");
+                }
+
+                if self.consume(TokenKind::Rbrace) {
+                    break;
+                } else if !self.consume(TokenKind::Semicolon) {
+                    self.add_error("',' ではありません");
+                    break;
+                }
+            }
+
+            // expect_type内でself.posが1足されてしまう
+            self.pos -= 1;
+
+            let ty = Type::new_structure(members);
+
+            // 名前が指定されていたら構造体マップに追加する
+            if let Some(name) = name {
+                self.structures.insert(name, ty.clone());
+            }
+
+            Some(ty)
+        } else if let Some(name) = name {
+            // expect_type内でself.posが1足されてしまう
+            self.pos -= 1;
+
+            // { ではなかったら構造体マップから探す
+            if let Some(ty) = self.structures.get(&name) {
+                Some(ty.clone())
             } else {
-                self.add_error("型ではありません");
+                self.add_error("構造体が見つかりません");
+                None
             }
-
-            if self.consume(TokenKind::Rbrace) {
-                break;
-            } else if !self.consume(TokenKind::Semicolon) {
-                self.add_error("',' ではありません");
-                break;
-            }
+        } else {
+            self.add_error("'{' か識別子ではありません");
+            None
         }
-
-        // expect_type内でself.posが1足されてしまう
-        self.pos -= 1;
-
-        Type::new_structure(members)
     }
 
     fn expect_type(&mut self) -> Option<Type> {
         let ty = match self.tokens[self.pos].kind {
             TokenKind::Int => Type::Int,
             TokenKind::Char => Type::Char,
-            TokenKind::Struct => self.parse_type_struct(),
+            TokenKind::Struct => match self.parse_type_struct() {
+                Some(ty) => ty,
+                None => return None,
+            },
             _ => return None,
         };
 
