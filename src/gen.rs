@@ -135,6 +135,29 @@ impl Generator {
                     _ => variable.ty.get_size(),
                 })
             },
+            ExprKind::MemberAccess(lhs, member) => {
+                // メンバを取得
+                let ty = lhs.ty();
+                let member = ty.find_member(&member);
+
+                self.gen_lvalue(*lhs);
+                add_mnemonic!(self, "pop rax");
+                add_mnemonic!(self, "lea rax, [rax+{}]", member.offset());
+
+                // match var.location {
+                //     Location::Local(offset) => add_mnemonic!(self, "lea rax, [rbp-{}]", offset - struct_size + member.offset()),
+                //     Location::Global(name) => add_mnemonic!(self, "lea rax, {}[rip+{}]", name, member.offset()),
+                // };
+
+                add_mnemonic!(self, "push rax");
+
+                // 変数のサイズを返す
+                // 配列の場合はポインタのサイズを返す
+                Some(match &member.ty {
+                    Type::Array(_, _) => 8,
+                    ty => ty.get_size(),
+                })
+            },
             _ => {
                 println!("代入の左辺値が変数ではありません");
                 None
@@ -310,7 +333,7 @@ impl Generator {
                 add_mnemonic!(self, "lea rax, .Ltext{}[rip]", num);
                 add_mnemonic!(self, "push rax");
             },
-            ExprKind::Variable(_) | ExprKind::Dereference(_) => self.gen_var_or_deref(expr),
+            ExprKind::Variable(_) | ExprKind::Dereference(_) | ExprKind::MemberAccess(_, _) => self.gen_var_or_deref(expr),
             ExprKind::Address(variable) => self.gen_address(variable),
             ExprKind::Assign(lhs, rhs) => self.gen_assign(*lhs, *rhs),
             ExprKind::Infix(kind, lhs, rhs) => self.gen_infix(kind, *lhs, *rhs),

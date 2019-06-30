@@ -211,6 +211,7 @@ impl Tokenizer {
                 '~' => self.add_token_and_skip(TokenKind::BitNot, 1),
                 '%' => self.add_token_and_skip(TokenKind::Mod, 1),
                 '#' => self.add_token_and_skip(TokenKind::Hash, 1),
+                '.' => self.add_token_and_skip(TokenKind::Dot, 1),
                 '\n' => {
                     self.line += 1;
                     self.col = 0;

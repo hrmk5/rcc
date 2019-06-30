@@ -54,23 +54,23 @@ impl Analyzer {
             return;
         }
 
-        expr.ty = Some(match &mut expr.kind {
-            ExprKind::Literal(Literal::Number(_)) => Type::Int,
-            ExprKind::Literal(Literal::String(_)) => Type::Pointer(Box::new(Type::Char)),
-            ExprKind::Variable(var) => var.ty.clone(),
+        expr.ty = match &mut expr.kind {
+            ExprKind::Literal(Literal::Number(_)) => Some(Type::Int),
+            ExprKind::Literal(Literal::String(_)) => Some(Type::Pointer(Box::new(Type::Char))),
+            ExprKind::Variable(var) => Some(var.ty.clone()),
             ExprKind::Dereference(expr) => match self.get_type(expr) {
-                Type::Pointer(box ty) | Type::Array(box ty, _) => ty,
+                Type::Pointer(box ty) | Type::Array(box ty, _) => Some(ty),
                 _ => panic!("ポインタではない式を参照外ししています"),
             },
-            ExprKind::Address(var) => Type::Pointer(Box::new(var.ty.clone())),
+            ExprKind::Address(var) => Some(Type::Pointer(Box::new(var.ty.clone()))),
             ExprKind::Assign(lhs, rhs) => {
                 self.walk_expr(rhs);
-                self.get_type(lhs)
+                Some(self.get_type(lhs))
             },
             ExprKind::Infix(infix, lhs, rhs) => {
                 let lty = self.get_type(lhs);
                 let rty = self.get_type(rhs);
-                match infix {
+                Some(match infix {
                     Infix::Add | Infix::Sub => {
                         match (lty, rty) {
                             (Type::Pointer(ty), _) | (_, Type::Pointer(ty)) => Type::Pointer(ty),
@@ -79,7 +79,7 @@ impl Analyzer {
                         }
                     },
                     _ => Type::Int,
-                }
+                })
             },
             ExprKind::Call(name, args) => {
                 for arg in args {
@@ -88,12 +88,28 @@ impl Analyzer {
 
                 // TODO: 型チェック
                 // TODO: 関数の存在チェック
-                self.functions.get(name).map_or(Type::Int, |func| func.return_type.clone())
+                Some(self.functions.get(name).map_or(Type::Int, |func| func.return_type.clone()))
             },
-            ExprKind::BitNot(expr) => self.get_type(expr),
+            ExprKind::BitNot(expr) => Some(self.get_type(expr)),
+            ExprKind::MemberAccess(expr, name) => {
+                let ty = self.get_type(expr);
+                match ty {
+                    Type::Structure(members, _) => match members.get(name) {
+                        Some(var) => Some(var.ty.clone()),
+                        _ => {
+                            self.add_error("メンバが見つかりません", &expr.span);
+                            None
+                        },
+                    },
+                    _ => {
+                        self.add_error("構造体ではありません", &expr.span);
+                        None
+                    },
+                }
+            },
             ExprKind::Invalid => panic!("Unexpected invalid expression"),
             ExprKind::SizeOf(_) => panic!("Unexpected sizeof unary operator"),
-        });
+        };
     }
 
     fn walk_initializer(&mut self, initializer: &mut Initializer) {

@@ -161,6 +161,12 @@ impl Parser {
             .map(|ty| ty.clone())
     }
 
+    fn find_var(&self, name: &str) -> Option<Variable> {
+        self.variables.get(name)
+            .or_else(|| self.global_variables.get(name))
+            .map(|var| var.clone())
+    }
+
     fn expect_ident(&mut self) -> Option<String> {
         match self.tokens[self.pos].kind {
             TokenKind::Ident(ref ident) => {
@@ -257,7 +263,7 @@ impl Parser {
 
         if self.consume(TokenKind::Lbrace) {
             // '{' だったら定義
-            let mut members = HashMap::new();
+            let mut members = Vec::new();
 
             loop {
                 if self.consume(TokenKind::Rbrace) {
@@ -266,7 +272,7 @@ impl Parser {
 
                 if let Some(ty) = self.expect_type(is_global) {
                     if let Some(ident) = self.expect_ident() {
-                        members.insert(ident, ty);
+                        members.push((ident, ty));
                     } else {
                         self.add_error("メンバ名ではありません");
                     }
@@ -362,6 +368,15 @@ impl Parser {
         }
     }
 
+    fn parse_member_access(&mut self, expr: Expr) -> ExprKind {
+        // メンバ名をパース
+        if let Some(member_name) = self.expect_ident() {
+            ExprKind::MemberAccess(Box::new(expr), member_name)
+        } else {
+            self.invalid_expr("メンバ名ではありません", 0)
+        }
+    }
+
     fn parse_var_or_call(&mut self, ident: String) -> ExprKind {
         if self.consume(TokenKind::Lparen) {
             // 識別子の直後のトークンが開きカッコだったら関数呼び出としてパースする
@@ -375,13 +390,7 @@ impl Parser {
     fn parse_term(&mut self) -> Expr {
         self.push_start_token();
 
-        // 現在のトークンが識別子だったら変数か関数呼び出しとしてパースする
-        let ident = self.expect_ident();
-        if let Some(ident) = ident {
-            return new_expr!(self, self.parse_var_or_call(ident));
-        }
-
-        match self.get_token_and_next() {
+        let mut expr = match self.get_token_and_next() {
             TokenKind::Lparen => {
                 self.pop_token();
                 let expr = self.parse_expr();
@@ -390,8 +399,17 @@ impl Parser {
             },
             TokenKind::Number(num) => new_expr!(self, ExprKind::Literal(Literal::Number(num))),
             TokenKind::String(s) => new_expr!(self, self.parse_string(s)),
+            TokenKind::Ident(ident) => new_expr!(self, self.parse_var_or_call(ident)),
             _ => new_expr!(self, self.invalid_expr("数値でも開きカッコでもないトークンです", 0)),
+        };
+
+        // 現在のトークンがドットだったらメンバアクセスとしてパースする
+        if self.consume(TokenKind::Dot) {
+            self.push_start_token();
+            expr = new_expr!(self, self.parse_member_access(expr));
         }
+
+        expr
     }
 
     fn parse_postfix(&mut self) -> Expr {

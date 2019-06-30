@@ -20,9 +20,10 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn new_structure(member_types: HashMap<String, Type>) -> Self {
+    pub fn new_structure(member_types: Vec<(String, Type)>) -> Self {
         let mut members = HashMap::new();
         let mut size = 0;
+
         for (name, ty) in member_types {
             let member_size = ty.get_size();
             size += member_size;
@@ -41,6 +42,16 @@ impl Type {
             Type::Pointer(_) => 8,
             Type::Array(ty, size) => ty.get_size() * size,
             Type::Structure(_, size) => *size,
+        }
+    }
+
+    pub fn find_member(&self, name: &str) -> &Variable {
+        match self {
+            Type::Structure(members, _) => match members.get(name) {
+                Some(var) => var,
+                _ => panic!("メンバが見つかりません"),
+            },
+            _ => panic!("構造体ではありません"),
         }
     }
 }
@@ -62,6 +73,13 @@ impl Variable {
         Self {
             ty,
             location,
+        }
+    }
+
+    pub fn offset(&self) -> usize {
+        match self.location {
+            Location::Local(offset) => offset,
+            _ => panic!("ローカル変数ではありません"),
         }
     }
 }
@@ -102,6 +120,7 @@ pub enum ExprKind {
     Call(String, Vec<Expr>),
     BitNot(Box<Expr>),
     SizeOf(Box<Expr>),
+    MemberAccess(Box<Expr>, String),
     Invalid,
 }
 
