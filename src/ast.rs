@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::error::Span;
 
 pub fn align(stack_size: usize, size: usize) -> usize {
@@ -15,15 +16,31 @@ pub enum Type {
     Char,
     Pointer(Box<Type>),
     Array(Box<Type>, usize),
+    Structure(HashMap<String, Variable>, usize),
 }
 
 impl Type {
+    pub fn new_structure(member_types: HashMap<String, Type>) -> Self {
+        let mut members = HashMap::new();
+        let mut size = 0;
+        for (name, ty) in member_types {
+            let member_size = ty.get_size();
+            size += member_size;
+            size = align(size, member_size);
+
+            members.insert(name, Variable::new(ty, Location::Local(size)));
+        }
+
+        Type::Structure(members, size)
+    }
+
     pub fn get_size(&self) -> usize {
         match self {
             Type::Int => 4,
             Type::Char => 1,
             Type::Pointer(_) => 8,
             Type::Array(ty, size) => ty.get_size() * size,
+            Type::Structure(_, size) => *size,
         }
     }
 }

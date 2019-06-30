@@ -233,10 +233,47 @@ impl Parser {
         }
     }
 
+    fn parse_type_struct(&mut self) -> Type {
+        // "struct" を消費
+        self.pos += 1;
+        expect!(self, TokenKind::Lbrace);
+
+        let mut members = HashMap::new();
+
+        loop {
+            if self.consume(TokenKind::Rbrace) {
+                break;
+            }
+
+            if let Some(ty) = self.expect_type() {
+                if let Some(ident) = self.expect_ident() {
+                    members.insert(ident, ty);
+                } else {
+                    self.add_error("メンバ名ではありません");
+                }
+            } else {
+                self.add_error("型ではありません");
+            }
+
+            if self.consume(TokenKind::Rbrace) {
+                break;
+            } else if !self.consume(TokenKind::Semicolon) {
+                self.add_error("',' ではありません");
+                break;
+            }
+        }
+
+        // expect_type内でself.posが1足されてしまう
+        self.pos -= 1;
+
+        Type::new_structure(members)
+    }
+
     fn expect_type(&mut self) -> Option<Type> {
         let ty = match self.tokens[self.pos].kind {
             TokenKind::Int => Type::Int,
             TokenKind::Char => Type::Char,
+            TokenKind::Struct => self.parse_type_struct(),
             _ => return None,
         };
 
@@ -677,14 +714,16 @@ impl Parser {
 
         // 引数をパース
         self.variables = HashMap::<String, Variable>::new();
-        loop {
-            let _ = self.expect_define(true, true);
+        if !self.consume(TokenKind::Rparen) {
+            loop {
+                let _ = self.expect_define(true, true);
 
-            if self.consume(TokenKind::Rparen) {
-                break;
-            } else if !self.consume(TokenKind::Comma) {
-                self.add_error("',' か ')' ではないトークンです");
-                break;
+                if self.consume(TokenKind::Rparen) {
+                    break;
+                } else if !self.consume(TokenKind::Comma) {
+                    self.add_error("',' か ')' ではないトークンです");
+                    break;
+                }
             }
         }
 

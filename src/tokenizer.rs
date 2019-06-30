@@ -106,6 +106,7 @@ impl Tokenizer {
             "int" => TokenKind::Int,
             "sizeof" => TokenKind::SizeOf,
             "char" => TokenKind::Char,
+            "struct" => TokenKind::Struct,
             _ => TokenKind::Ident(s),
         }, start_col, self.col);
     }
