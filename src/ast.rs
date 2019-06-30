@@ -1,6 +1,15 @@
 use crate::error::Span;
 
-#[derive(Debug, Clone, PartialEq)]
+pub fn align(stack_size: usize, size: usize) -> usize {
+    let mut stack_size = stack_size;
+    let padding = size - stack_size % size;
+    if padding != size {
+        stack_size += padding;
+    }
+    stack_size
+}
+
+#[derive(Debug, Clone)]
 pub enum Type {
     Int,
     Char,

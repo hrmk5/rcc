@@ -215,14 +215,10 @@ impl Parser {
             Type::Array(ty, _) if array_as_pointer => Type::Pointer(ty.clone()),
             ty => ty.clone(),
         };
-        let size = ty.get_size();
 
+        let size = ty.get_size();
         self.stack_size += size;
-        // アラインメント
-        let padding = size - self.stack_size % size;
-        if padding != size {
-            self.stack_size += padding;
-        }
+        self.stack_size = align(self.stack_size, size);
 
         let variable = Variable::new(ty.clone(), Location::Local(self.stack_size));
         self.variables.insert(ident.to_string(), variable.clone());
