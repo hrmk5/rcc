@@ -257,16 +257,19 @@ impl Parser {
     fn parse_call(&mut self, ident: String) -> ExprKind {
         // 引数をパース
         let mut args = Vec::<Expr>::new();
-        loop {
-            args.push(self.parse_expr());
-            if self.consume(TokenKind::Rparen) {
-                break;
-            } else if self.consume(TokenKind::EOF) {
-                self.add_error("開きカッコに対応する閉じカッコがありません");
-                break;
-            }
+        
+        if !self.consume(TokenKind::Rparen) {
+            loop {
+                args.push(self.parse_expr());
+                if self.consume(TokenKind::Rparen) {
+                    break;
+                } else if self.consume(TokenKind::EOF) {
+                    self.add_error_token("開きカッコに対応する閉じカッコがありません", self.pos - 1);
+                    break;
+                }
 
-            expect!(self, TokenKind::Comma);
+                expect!(self, TokenKind::Comma);
+            }
         }
 
         ExprKind::Call(ident, args)

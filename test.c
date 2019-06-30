@@ -18,6 +18,10 @@ int end(int arr[5]) {
     return arr[4];
 }
 
+int no_return() {
+    return 5 * 9;
+}
+
 #define MACRO 10
 #define MACRO2 expect("nested macro", 15, MACRO + 5)
 
@@ -118,6 +122,7 @@ int main() {
     expect("call", 45, plus(10, 35));
     expect("call2", 30, plus(5, 4) + plus(5, 16));
     expect("call3", 10, end(arr));
+    expect("call4", 45, no_return());
 
     char ch;
 
