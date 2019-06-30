@@ -189,7 +189,7 @@ impl Parser {
         }
     }
 
-    fn expect_define(&mut self, array_as_pointer: bool) -> Option<Variable> {
+    fn expect_define(&mut self, array_as_pointer: bool, allow_ident_omit: bool) -> Option<Variable> {
         let ty = self.expect_type()?;
         let ident = self.expect_ident();
         match ident {
@@ -202,10 +202,11 @@ impl Parser {
                 let variable = self.define_variable(&ident, &ty, array_as_pointer);
                 Some(variable)
             },
-            None => {
+            None if !allow_ident_omit => {
                 self.add_error("識別子ではありません");
                 None
             },
+            None => Some(Variable::new(ty, Location::Global(String::new()))),
         }
     }
 
@@ -636,7 +637,7 @@ impl Parser {
 
     fn expect_define_stmt(&mut self) -> Option<StmtKind> {
         // 変数定義
-        let variable = self.expect_define(false);
+        let variable = self.expect_define(false, false);
         if let Some(variable) = variable {
             // = があったら初期化式をパース
             let initializer = if self.consume(TokenKind::Assign) {
@@ -672,13 +673,13 @@ impl Parser {
         new_stmt!(self, kind)
     }
 
-    fn parse_func_decl(&mut self, ty: Type, ident: String) -> DeclarationKind {
+    fn parse_func_decl(&mut self, ty: Type, ident: String) -> Option<DeclarationKind> {
         self.stack_size = 0;
 
         // 引数をパース
         self.variables = HashMap::<String, Variable>::new();
         loop {
-            let _ = self.expect_define(true);
+            let _ = self.expect_define(true, true);
 
             if self.consume(TokenKind::Rparen) {
                 break;
@@ -690,15 +691,24 @@ impl Parser {
 
         // 引数をVec<Variable>に変換
         let mut args: Vec<Variable> = self.variables.clone().into_iter().map(|(_, v)| v).collect();
+        let mut is_prototype = false;
         args.sort_by_key(|v| {
             match v.location {
                 Location::Local(offset) => offset,
-                _ => panic!("引数がグローバル変数です"),
+                _ => { is_prototype = true; 0 },
             }
         });
 
-        let stmt = self.parse_stmt();
-        DeclarationKind::Func(ident, ty, args, self.stack_size, stmt)
+        if self.consume(TokenKind::Semicolon) {
+            // セミコロンだったらプロトタイプ宣言
+            Some(DeclarationKind::Prototype(ident, ty, args.into_iter().map(|var| var.ty).collect()))
+        } else if is_prototype {
+            self.add_error("引数名を省略しています");
+            None
+        } else {
+            let stmt = self.parse_stmt();
+            Some(DeclarationKind::Func(ident, ty, args, self.stack_size, stmt))
+        }
     }
 
     fn parse_global_var_decl(&mut self, ty: Type, ident: String) -> Option<DeclarationKind> {
@@ -733,7 +743,7 @@ impl Parser {
             if let Some(ident) = ident {
                 if self.consume(TokenKind::Lparen) {
                     // 識別子の次のトークンが開きカッコだったら関数定義としてパースする
-                    Some(self.parse_func_decl(ty, ident))
+                    self.parse_func_decl(ty, ident)
                 } else {
                     // 開きカッコではなかったらグローバル変数定義としてパースする
                     self.parse_global_var_decl(ty, ident)

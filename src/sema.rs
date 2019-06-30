@@ -157,7 +157,10 @@ impl Analyzer {
                 }
             },
             DeclarationKind::GlobalVariable(_, Some(init_expr)) => self.walk_initializer(init_expr),
-            _ => {},
+            DeclarationKind::GlobalVariable(_, _) => {},
+            DeclarationKind::Prototype(name, return_type, args) => {
+                self.functions.insert(name.clone(), Function::new(return_type.clone(), args.clone()));
+            },
         };
     }
 

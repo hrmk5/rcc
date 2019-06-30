@@ -125,6 +125,7 @@ pub struct Stmt {
 pub enum DeclarationKind {
     Func(String, Type, Vec<Variable>, usize, Stmt), // 関数名, 戻り値の型, 引数, スタックのサイズ, 処理
     GlobalVariable(Variable, Option<Initializer>), // 変数名, 変数, 初期化式
+    Prototype(String, Type, Vec<Type>), // 関数名, 戻り値の型, 引数
 }
 
 #[derive(Debug)]
