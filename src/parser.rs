@@ -9,6 +9,7 @@ use crate::error::{CompileError, Span};
 pub struct Parser {
     pub errors: Vec<CompileError>,
     global_variables: HashMap<String, Variable>,
+    global_structures: HashMap<String, Type>,
     string_list: Vec<String>,
     variables: HashMap<String, Variable>,
     structures: HashMap<String, Type>,
@@ -86,6 +87,7 @@ impl Parser {
             tokens,
             errors: Vec::new(),
             global_variables: HashMap::new(),
+            global_structures: HashMap::new(),
             string_list: Vec::new(),
             variables: HashMap::new(),
             structures: HashMap::new(),
@@ -153,6 +155,12 @@ impl Parser {
         kind
     }
 
+    fn find_struct(&self, name: &str) -> Option<Type> {
+        self.structures.get(name)
+            .or_else(|| self.global_structures.get(name))
+            .map(|ty| ty.clone())
+    }
+
     fn expect_ident(&mut self) -> Option<String> {
         match self.tokens[self.pos].kind {
             TokenKind::Ident(ref ident) => {
@@ -192,7 +200,7 @@ impl Parser {
     }
 
     fn expect_define(&mut self, array_as_pointer: bool, allow_ident_omit: bool) -> Option<Variable> {
-        let ty = self.expect_type()?;
+        let ty = self.expect_type(false)?;
         let ident = self.expect_ident();
         match ident {
             Some(ident) => {
@@ -235,7 +243,7 @@ impl Parser {
         }
     }
 
-    fn parse_type_struct(&mut self) -> Option<Type> {
+    fn parse_type_struct(&mut self, is_global: bool) -> Option<Type> {
         // "struct" を消費
         self.pos += 1;
 
@@ -256,7 +264,7 @@ impl Parser {
                     break;
                 }
 
-                if let Some(ty) = self.expect_type() {
+                if let Some(ty) = self.expect_type(is_global) {
                     if let Some(ident) = self.expect_ident() {
                         members.insert(ident, ty);
                     } else {
@@ -281,7 +289,9 @@ impl Parser {
 
             // 名前が指定されていたら構造体マップに追加する
             if let Some(name) = name {
-                self.structures.insert(name, ty.clone());
+                // 構造体マップ
+                let structures = if is_global { &mut self.global_structures } else { &mut self.structures };
+                structures.insert(name, ty.clone());
             }
 
             Some(ty)
@@ -290,7 +300,7 @@ impl Parser {
             self.pos -= 1;
 
             // { ではなかったら構造体マップから探す
-            if let Some(ty) = self.structures.get(&name) {
+            if let Some(ty) = self.find_struct(&name) {
                 Some(ty.clone())
             } else {
                 self.add_error("構造体が見つかりません");
@@ -302,11 +312,11 @@ impl Parser {
         }
     }
 
-    fn expect_type(&mut self) -> Option<Type> {
+    fn expect_type(&mut self, is_global: bool) -> Option<Type> {
         let ty = match self.tokens[self.pos].kind {
             TokenKind::Int => Type::Int,
             TokenKind::Char => Type::Char,
-            TokenKind::Struct => match self.parse_type_struct() {
+            TokenKind::Struct => match self.parse_type_struct(is_global) {
                 Some(ty) => ty,
                 None => return None,
             },
@@ -810,7 +820,14 @@ impl Parser {
         self.push_start_token();
 
         // 型
-        let ty = self.expect_type();
+        let ty = self.expect_type(true);
+
+        // セミコロンだったら構造体などの定義
+        if self.consume(TokenKind::Semicolon) {
+            self.pop_token();
+            return None;
+        }
+
         let kind = if let Some(ty) = ty {
             // 識別子
             let ident = self.expect_ident();
