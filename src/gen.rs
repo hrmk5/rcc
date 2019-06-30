@@ -321,6 +321,11 @@ impl Generator {
         };
     }
 
+    fn gen_expr_stmt(&mut self, expr: Expr) {
+        self.gen_expr(expr);
+        add_mnemonic!(self, "pop rax");
+    }
+
     fn gen_return_stmt(&mut self, expr: Expr) {
         self.gen_expr(expr);
         add_mnemonic!(self, "pop rax");
@@ -377,7 +382,6 @@ impl Generator {
         // 初期化式
         if let Some(init) = init {
             self.gen_stmt(*init);
-            add_mnemonic!(self, "pop rax");
         }
 
         add_label!(self, ".Lbegin", label_num);
@@ -395,6 +399,7 @@ impl Generator {
 
         if let Some(loop_expr) = loop_expr {
             self.gen_expr(loop_expr);
+            add_mnemonic!(self, "pop rax");
         }
 
         add_mnemonic!(self, "jmp .Lbegin{}", label_num);
@@ -415,23 +420,14 @@ impl Generator {
 
     fn gen_block_stmt(&mut self, stmt_list: Vec<Stmt>) {
         for stmt in stmt_list {
-            let must_pop = match stmt.kind {
-                StmtKind::Return(_) | StmtKind::Define(_, _) => false,
-                _ => true,
-            };
-
             self.gen_stmt(stmt);
-
-            if must_pop {
-                add_mnemonic!(self, "pop rax");
-            }
         }
     }
 
     fn gen_stmt(&mut self, stmt: Stmt) {
         #[allow(unreachable_patterns)]
         match stmt.kind {
-            StmtKind::Expr(expr) => self.gen_expr(expr),
+            StmtKind::Expr(expr) => self.gen_expr_stmt(expr),
             StmtKind::Return(expr) => self.gen_return_stmt(expr),
             StmtKind::If(cond, if_stmt, else_stmt) => self.gen_if_stmt(cond, *if_stmt, else_stmt),
             StmtKind::While(expr, stmt) => self.gen_while_stmt(expr, *stmt),
