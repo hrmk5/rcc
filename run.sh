@@ -1,11 +1,20 @@
 input="$1"
 
-cargo run --quiet "$input" > tmp.s
+tmpfile=$(mktemp "/tmp/tmp.XXXXXX.s")
+tmpbin=$(mktemp "/tmp/tmp.XXXXXX")
+
+atexit() {
+    rm "$tmpfile" "$tmpbin"
+}
+
+trap atexit EXIT
+
+cargo run --quiet "$input" > "$tmpfile"
 if [ $? -ne 0 ]; then
-    cat tmp.s
+    cat "$tmpfile"
     exit 1
 fi
 
-gcc -o tmp tmp.s
-./tmp
+gcc -o "$tmpbin" "$tmpfile"
+$tmpbin
 echo $?
