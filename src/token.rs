@@ -43,6 +43,7 @@ pub enum TokenKind {
     Struct,
     Dot,
     Arrow,
+    Void,
 }
 
 impl ToString for TokenKind {
@@ -91,6 +92,7 @@ impl ToString for TokenKind {
             TokenKind::Struct => "struct",
             TokenKind::Dot => ".",
             TokenKind::Arrow => "->",
+            TokenKind::Void => "void",
         })
     }
 }

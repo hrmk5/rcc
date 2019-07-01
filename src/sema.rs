@@ -146,10 +146,16 @@ impl Analyzer {
             StmtKind::Return(expr) => {
                 self.walk_expr(expr);
             },
-            StmtKind::Define(_, initializer) => {
-                if let Some(initializer) = initializer {
-                    self.walk_initializer(initializer);
-                }
+            StmtKind::Define(var, initializer) => {
+                match var.ty {
+                    Type::Void => self.add_error("void型の変数は定義できません", &stmt.span),
+                    Type::Array(box Type::Void, _) => self.add_error("void型の配列は定義できません", &stmt.span),
+                    _ => {
+                        if let Some(initializer) = initializer {
+                            self.walk_initializer(initializer);
+                        }
+                    },
+                };
             },
             StmtKind::Block(stmt_list) => {
                 for stmt in stmt_list {

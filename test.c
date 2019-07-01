@@ -22,7 +22,7 @@ int calc() {
     return 5 * 9;
 }
 
-int no_return() {
+void no_return() {
 }
 
 #define MACRO 10

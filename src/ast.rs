@@ -14,6 +14,7 @@ pub fn align(stack_size: usize, size: usize) -> usize {
 pub enum Type {
     Int,
     Char,
+    Void,
     Pointer(Box<Type>),
     Array(Box<Type>, usize),
     Structure(HashMap<String, Variable>, usize),
@@ -39,6 +40,7 @@ impl Type {
         match self {
             Type::Int => 4,
             Type::Char => 1,
+            Type::Void => 8,
             Type::Pointer(_) => 8,
             Type::Array(ty, size) => ty.get_size() * size,
             Type::Structure(_, size) => *size,
