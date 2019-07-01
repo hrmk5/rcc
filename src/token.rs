@@ -42,6 +42,7 @@ pub enum TokenKind {
     NewLine,
     Struct,
     Dot,
+    Arrow,
 }
 
 impl ToString for TokenKind {
@@ -89,6 +90,7 @@ impl ToString for TokenKind {
             TokenKind::NewLine => "\\n",
             TokenKind::Struct => "struct",
             TokenKind::Dot => ".",
+            TokenKind::Arrow => "->",
         })
     }
 }

@@ -182,6 +182,7 @@ impl Tokenizer {
                 c if c.is_digit(10) => self.tokenize_number(10),
                 c if c.is_ascii_alphanumeric() || c == '_' => self.tokenize_ident(),
                 '+' => self.add_token_and_skip(TokenKind::Add, 1),
+                '-' if self.next_is('>') => self.add_token_and_skip(TokenKind::Arrow, 2),
                 '-' => self.add_token_and_skip(TokenKind::Sub, 1),
                 '*' => self.add_token_and_skip(TokenKind::Asterisk, 1),
                 '/' if self.next_is('/') => self.skip_single_line_comment(),

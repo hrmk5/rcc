@@ -368,10 +368,14 @@ impl Parser {
         }
     }
 
-    fn parse_member_access(&mut self, expr: Expr) -> ExprKind {
+    fn parse_member_access(&mut self, expr: Expr, is_arrow: bool) -> ExprKind {
         // メンバ名をパース
         if let Some(member_name) = self.expect_ident() {
-            ExprKind::MemberAccess(Box::new(expr), member_name)
+            if is_arrow {
+                ExprKind::MemberAccess(Box::new(new_expr_peek!(self, ExprKind::Dereference(Box::new(expr)))), member_name)
+            } else {
+                ExprKind::MemberAccess(Box::new(expr), member_name)
+            }
         } else {
             self.invalid_expr("メンバ名ではありません", 0)
         }
@@ -406,7 +410,10 @@ impl Parser {
         // 現在のトークンがドットだったらメンバアクセスとしてパースする
         if self.consume(TokenKind::Dot) {
             self.push_start_token();
-            expr = new_expr!(self, self.parse_member_access(expr));
+            expr = new_expr!(self, self.parse_member_access(expr, false));
+        } else if self.consume(TokenKind::Arrow) {
+            self.push_start_token();
+            expr = new_expr!(self, self.parse_member_access(expr, true));
         }
 
         expr
