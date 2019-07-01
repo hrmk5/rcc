@@ -42,12 +42,3 @@ pub struct CompileError {
     pub span: Span,
     pub msg: String,
 }
-
-impl CompileError {
-    pub fn new(span: Span, msg: &str) -> Self {
-        Self {
-            span,
-            msg: msg.to_string(),
-        }
-    }
-}

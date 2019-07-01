@@ -363,9 +363,9 @@ impl Parser {
 
     fn parse_var(&mut self, ident: String) -> ExprKind {
         // 変数マップから探す
-        match (self.variables.get(&ident), self.global_variables.get(&ident)) {
-            (Some(variable), _) | (_, Some(variable)) => ExprKind::Variable(variable.clone()),
-            _ => self.invalid_expr(&format!("変数 \"{}\" が見つかりません", ident), -1),
+        match self.find_var(&ident) {
+            Some(var) => ExprKind::Variable(var.clone()),
+            _ => self.invalid_expr("変数が見つかりません", -1),
         }
     }
 
@@ -462,12 +462,12 @@ impl Parser {
         self.push_prev_token();
         let ident = self.expect_ident();
         let kind = if let Some(ident) = ident {
-            match (self.variables.get(&ident), self.global_variables.get(&ident)) {
-                (Some(variable), _) | (_, Some(variable)) => ExprKind::Address(variable.clone()),
-                _ => self.invalid_expr(&format!("変数 \"{}\" が見つかりません", ident), -1),
+            match self.find_var(&ident) {
+                Some(var) => ExprKind::Address(var.clone()),
+                _ => self.invalid_expr("変数が見つかりません", -1),
             }
         } else {
-            self.invalid_expr("変数ではありません", 0)
+            self.invalid_expr("変数名ではありません", 0)
         };
         new_expr!(self, kind)
     }

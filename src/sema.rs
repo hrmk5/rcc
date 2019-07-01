@@ -3,6 +3,7 @@ use std::mem;
 use crate::ast::*;
 use crate::error::{CompileError, Span};
 
+#[allow(dead_code)]
 struct Function {
     return_type: Type,
     args: Vec<Type>,
