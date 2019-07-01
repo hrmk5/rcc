@@ -3,6 +3,7 @@ use crate::ast::*;
 pub struct Generator {
     pub code: String,
     label_num: u32,
+    has_return: bool,
 }
 
 const ARG_REGISTERS: [&str; 6] = ["r9", "r8", "rcx", "rdx", "rsi", "rdi"];
@@ -39,6 +40,7 @@ impl Generator {
         Generator {
             code: String::new(),
             label_num: 0,
+            has_return: false,
         }
     }
 
@@ -143,12 +145,6 @@ impl Generator {
                 self.gen_lvalue(*lhs);
                 add_mnemonic!(self, "pop rax");
                 add_mnemonic!(self, "lea rax, [rax+{}]", member.offset());
-
-                // match var.location {
-                //     Location::Local(offset) => add_mnemonic!(self, "lea rax, [rbp-{}]", offset - struct_size + member.offset()),
-                //     Location::Global(name) => add_mnemonic!(self, "lea rax, {}[rip+{}]", name, member.offset()),
-                // };
-
                 add_mnemonic!(self, "push rax");
 
                 // 変数のサイズを返す
@@ -350,6 +346,7 @@ impl Generator {
     }
 
     fn gen_return_stmt(&mut self, expr: Expr) {
+        self.has_return = true;
         self.gen_expr(expr);
         add_mnemonic!(self, "pop rax");
         add_mnemonic!(self, "mov rsp, rbp");
@@ -504,7 +501,16 @@ impl Generator {
                     };
                 }
 
+                self.has_return = false;
                 self.gen_stmt(block);
+
+                // return文がなかったら0を返す
+                if !self.has_return {
+                    add_mnemonic!(self, "mov rax, 0");
+                    add_mnemonic!(self, "mov rsp, rbp");
+                    add_mnemonic!(self, "pop rbp");
+                    add_mnemonic!(self, "ret");
+                }
             },
             _ => {},
         }
