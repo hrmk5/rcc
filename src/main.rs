@@ -103,7 +103,8 @@ fn main() {
     };
 
     if let ShowType::Program = show_type {
-        println!("{:?}", program);
+        dbg!(program);
+        process::exit(1);
     }
 
     // 意味解析
