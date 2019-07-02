@@ -47,6 +47,7 @@ pub enum TokenKind {
     Typedef,
     Short,
     Long,
+    Enum,
 }
 
 impl ToString for TokenKind {
@@ -99,6 +100,7 @@ impl ToString for TokenKind {
             TokenKind::Typedef => "typedef",
             TokenKind::Short => "short",
             TokenKind::Long => "long",
+            TokenKind::Enum => "enum",
         })
     }
 }

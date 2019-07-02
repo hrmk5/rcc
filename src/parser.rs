@@ -12,9 +12,11 @@ pub struct Parser {
     global_variables: HashMap<String, Variable>,
     global_structures: HashMap<String, Type>,
     global_typedefs: HashMap<String, Type>,
+    global_enums: HashMap<String, i64>,
     variables: HashMap<String, Variable>,
     structures: HashMap<String, Type>,
     typedefs: HashMap<String, Type>,
+    enums: HashMap<String, i64>,
 
     string_list: Vec<String>,
     tokens: Vec<Token>,
@@ -93,9 +95,11 @@ impl Parser {
             global_variables: HashMap::new(),
             global_structures: HashMap::new(),
             global_typedefs: HashMap::new(),
+            global_enums: HashMap::new(),
             variables: HashMap::new(),
             structures: HashMap::new(),
             typedefs: HashMap::new(),
+            enums: HashMap::new(),
             string_list: Vec::new(),
             stack_size: 0,
             start_token_stack: Vec::new(),
@@ -176,6 +180,12 @@ impl Parser {
     fn find_typedef(&self, name: &str) -> Option<&Type> {
         self.typedefs.get(name)
             .or_else(|| self.global_typedefs.get(name))
+    }
+
+    fn find_enum(&self, name: &str) -> Option<i64> {
+        self.enums.get(name)
+            .or_else(|| self.global_enums.get(name))
+            .map(|n| n.clone())
     }
 
     fn expect_ident(&mut self) -> Option<String> {
@@ -376,6 +386,10 @@ impl Parser {
     }
 
     fn parse_var(&mut self, ident: String) -> ExprKind {
+        if let Some(num) = self.find_enum(&ident) {
+            return ExprKind::Literal(Literal::Number(num as i32));
+        }
+
         // 変数マップから探す
         match self.find_var(&ident) {
             Some(var) => ExprKind::Variable(var.clone()),
@@ -794,6 +808,42 @@ impl Parser {
         expect!(self, TokenKind::Semicolon);
     }
 
+    fn parse_enum(&mut self, is_global: bool) {
+        expect!(self, TokenKind::Lbrace);
+
+        let mut n = 0i64;
+
+        if !self.consume(TokenKind::Rbrace) {
+            loop {
+                if let Some(ident) = self.expect_ident() {
+                    if self.consume(TokenKind::Assign) {
+                        if let TokenKind::Number(num) = self.get_token_and_next() {
+                            n = num as i64;
+                        } else {
+                            self.add_error_token("", self.pos - 1);
+                        }
+                    }
+
+                    let enums = if is_global { &mut self.global_enums } else { &mut self.enums };
+                    enums.insert(ident.clone(), n);
+                    n += 1;
+                } else {
+                    self.add_error("識別子ではありません");
+                    break;
+                }
+
+                if self.consume(TokenKind::Rbrace) {
+                    break;
+                } else if !self.consume(TokenKind::Comma) {
+                    self.add_error("',' ではありません");
+                    break;
+                }
+            }
+        }
+
+        expect!(self, TokenKind::Semicolon);
+    }
+
     fn parse_stmt(&mut self) -> Stmt {
         self.push_start_token();
         if let Some(kind) = self.expect_define_stmt() {
@@ -808,6 +858,10 @@ impl Parser {
             TokenKind::Lbrace => self.parse_block_stmt(),
             TokenKind::Typedef => {
                 self.parse_typedef(false);
+                StmtKind::Block(Vec::new())
+            },
+            TokenKind::Enum => {
+                self.parse_enum(false);
                 StmtKind::Block(Vec::new())
             },
             _ => {
@@ -887,6 +941,14 @@ impl Parser {
             self.pos += 1;
             self.pop_token();
             self.parse_typedef(true);
+            return None;
+        }
+
+        // enum
+        if let TokenKind::Enum = self.get_token() {
+            self.pos += 1;
+            self.pop_token();
+            self.parse_enum(true);
             return None;
         }
 
