@@ -8,11 +8,15 @@ use crate::error::{CompileError, Span};
 #[derive(Debug)]
 pub struct Parser {
     pub errors: Vec<CompileError>,
+
     global_variables: HashMap<String, Variable>,
     global_structures: HashMap<String, Type>,
-    string_list: Vec<String>,
+    global_typedefs: HashMap<String, Type>,
     variables: HashMap<String, Variable>,
     structures: HashMap<String, Type>,
+    typedefs: HashMap<String, Type>,
+
+    string_list: Vec<String>,
     tokens: Vec<Token>,
     pos: usize,
     stack_size: usize,
@@ -88,9 +92,11 @@ impl Parser {
             errors: Vec::new(),
             global_variables: HashMap::new(),
             global_structures: HashMap::new(),
-            string_list: Vec::new(),
+            global_typedefs: HashMap::new(),
             variables: HashMap::new(),
             structures: HashMap::new(),
+            typedefs: HashMap::new(),
+            string_list: Vec::new(),
             stack_size: 0,
             start_token_stack: Vec::new(),
         }
@@ -165,6 +171,11 @@ impl Parser {
         self.variables.get(name)
             .or_else(|| self.global_variables.get(name))
             .map(|var| var.clone())
+    }
+
+    fn find_typedef(&self, name: &str) -> Option<&Type> {
+        self.typedefs.get(name)
+            .or_else(|| self.global_typedefs.get(name))
     }
 
     fn expect_ident(&mut self) -> Option<String> {
@@ -327,6 +338,7 @@ impl Parser {
                 Some(ty) => ty,
                 None => return None,
             },
+            TokenKind::Ident(ref name) => self.find_typedef(name)?.clone(),
             _ => return None,
         };
 
@@ -761,6 +773,25 @@ impl Parser {
         }
     }
 
+    fn parse_typedef(&mut self, is_global: bool) {
+        let ty = match self.expect_type(is_global) {
+            Some(ty) => ty,
+            None => {
+                self.add_error("型ではありません");
+                return;
+            },
+        };
+
+        if let Some(name) = self.expect_ident() {
+            let typedefs = if is_global { &mut self.global_typedefs } else { &mut self.typedefs };
+            typedefs.insert(name, ty);
+        } else {
+            self.add_error("識別子ではありません");
+        }
+
+        expect!(self, TokenKind::Semicolon);
+    }
+
     fn parse_stmt(&mut self) -> Stmt {
         self.push_start_token();
         if let Some(kind) = self.expect_define_stmt() {
@@ -773,6 +804,10 @@ impl Parser {
             TokenKind::While => self.parse_while_stmt(),
             TokenKind::For => self.parse_for_stmt(),
             TokenKind::Lbrace => self.parse_block_stmt(),
+            TokenKind::Typedef => {
+                self.parse_typedef(false);
+                StmtKind::Block(Vec::new())
+            },
             _ => {
                 self.pos -= 1;
                 self.parse_expr_stmt()
@@ -844,6 +879,14 @@ impl Parser {
 
     pub fn parse_declaration(&mut self) -> Option<Declaration> {
         self.push_start_token();
+
+        // typedef
+        if let TokenKind::Typedef = self.get_token() {
+            self.pos += 1;
+            self.pop_token();
+            self.parse_typedef(true);
+            return None;
+        }
 
         // 型
         let ty = self.expect_type(true);

@@ -44,6 +44,7 @@ pub enum TokenKind {
     Dot,
     Arrow,
     Void,
+    Typedef,
 }
 
 impl ToString for TokenKind {
@@ -93,6 +94,7 @@ impl ToString for TokenKind {
             TokenKind::Dot => ".",
             TokenKind::Arrow => "->",
             TokenKind::Void => "void",
+            TokenKind::Typedef => "typedef",
         })
     }
 }

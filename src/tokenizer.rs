@@ -108,6 +108,7 @@ impl Tokenizer {
             "char" => TokenKind::Char,
             "struct" => TokenKind::Struct,
             "void" => TokenKind::Void,
+            "typedef" => TokenKind::Typedef,
             _ => TokenKind::Ident(s),
         }, start_col, self.col);
     }
