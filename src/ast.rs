@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use crate::error::Span;
 
-pub fn align(stack_size: usize, size: usize) -> usize {
+pub fn align(stack_size: usize, ty: &Type) -> usize {
+    let align = ty.align();
     let mut stack_size = stack_size;
-    let padding = size - stack_size % size;
-    if padding != size {
+    let padding = align - stack_size % align;
+    if padding != align {
         stack_size += padding;
     }
     stack_size
@@ -30,7 +31,7 @@ impl Type {
         for (name, ty) in member_types {
             let member_size = ty.get_size();
             size += member_size;
-            size = align(size, member_size);
+            size = align(size, &ty);
 
             members.insert(name, Variable::new(ty, Location::Local(size)));
         }
@@ -48,6 +49,16 @@ impl Type {
             Type::Pointer(_) => 8,
             Type::Array(ty, size) => ty.get_size() * size,
             Type::Structure(_, size) => *size,
+        }
+    }
+
+    pub fn align(&self) -> usize {
+        match self {
+            Type::Structure(members, _) => members.iter()
+                .max_by_key(|(_, var)| var.ty.align())
+                .map_or(0, |(_, var)| var.ty.align()),
+            Type::Array(ty, _) => ty.align(),
+            ty => ty.get_size(),
         }
     }
 

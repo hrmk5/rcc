@@ -245,7 +245,7 @@ impl Parser {
 
         let size = ty.get_size();
         self.stack_size += size;
-        self.stack_size = align(self.stack_size, size);
+        self.stack_size = align(self.stack_size, &ty);
 
         let variable = Variable::new(ty.clone(), Location::Local(self.stack_size));
         self.variables.insert(ident.to_string(), variable.clone());
