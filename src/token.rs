@@ -45,6 +45,8 @@ pub enum TokenKind {
     Arrow,
     Void,
     Typedef,
+    Short,
+    Long,
 }
 
 impl ToString for TokenKind {
@@ -95,6 +97,8 @@ impl ToString for TokenKind {
             TokenKind::Arrow => "->",
             TokenKind::Void => "void",
             TokenKind::Typedef => "typedef",
+            TokenKind::Short => "short",
+            TokenKind::Long => "long",
         })
     }
 }

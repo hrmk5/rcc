@@ -67,6 +67,17 @@ impl Generator {
                 "r9" => Some("r9b"),
                 _ => None,
             },
+            2 => match register {
+                "rax" => Some("ax"),
+                "rbx" => Some("bx"),
+                "rcx" => Some("cx"),
+                "rdx" => Some("dx"),
+                "rsi" => Some("si"),
+                "rdi" => Some("di"),
+                "r8" => Some("r8w"),
+                "r9" => Some("r9w"),
+                _ => None,
+            },
             4 => match register {
                 "rax" => Some("eax"),
                 "rbx" => Some("ebx"),
@@ -171,9 +182,9 @@ impl Generator {
 
         if let Some(size) = size {
             let size_str = self.get_size_str(size).unwrap();
-            let register = self.get_size_register(if size == 1 { 4 } else { size }, "rax").unwrap();
+            let register = self.get_size_register(if size == 1 || size == 2 { 4 } else { size }, "rax").unwrap();
             let mov = match size {
-                1 => "movsx",
+                1 | 2 => "movsx",
                 _ => "mov",
             };
 
@@ -545,6 +556,8 @@ impl Generator {
         match (ty.clone(), init_expr.kind) {
             (Type::Int, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".int {}", num),
             (Type::Char, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".byte {}", num),
+            (Type::Short, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".value {}", num),
+            (Type::Long, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".quad {}", num),
             (Type::Pointer(_), ExprKind::Address(variable)) => add_mnemonic!(self, ".quad {}", global!(variable)),
             // TODO: ポインタ演算
             (Type::Array(box Type::Char, _), ExprKind::Literal(Literal::String(num))) |

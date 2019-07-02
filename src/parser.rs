@@ -333,6 +333,8 @@ impl Parser {
         let ty = match self.tokens[self.pos].kind {
             TokenKind::Int => Type::Int,
             TokenKind::Char => Type::Char,
+            TokenKind::Short => Type::Short,
+            TokenKind::Long => Type::Long,
             TokenKind::Void => Type::Void,
             TokenKind::Struct => match self.parse_type_struct(is_global) {
                 Some(ty) => ty,

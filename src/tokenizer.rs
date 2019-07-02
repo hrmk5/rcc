@@ -109,6 +109,8 @@ impl Tokenizer {
             "struct" => TokenKind::Struct,
             "void" => TokenKind::Void,
             "typedef" => TokenKind::Typedef,
+            "short" => TokenKind::Short,
+            "long" => TokenKind::Long,
             _ => TokenKind::Ident(s),
         }, start_col, self.col);
     }
