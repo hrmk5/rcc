@@ -499,7 +499,11 @@ impl Generator {
 
     pub fn gen_declaration(&mut self, declaration: Declaration) {
         match declaration.kind {
-            DeclarationKind::Func(name, _, args, stack_size, block) => {
+            DeclarationKind::Func(name, _, args, stack_size, block, is_static) => {
+                if !is_static {
+                    self.code.push_str(&format!(".global {}\n", name));
+                }
+
                 add_label!(self, &name);
 
                 add_mnemonic!(self, "push rbp");
@@ -536,7 +540,11 @@ impl Generator {
         // グローバル変数
         for declaration in declarations {
             match &declaration.kind {
-                DeclarationKind::GlobalVariable(variable, initializer) => {
+                DeclarationKind::GlobalVariable(variable, initializer, is_static) => {
+                    if !is_static {
+                        self.code.push_str(&format!(".global {}\n", global!(variable.clone())));
+                    }
+
                     add_label!(self, global!(variable.clone()));
 
                     // 初期値

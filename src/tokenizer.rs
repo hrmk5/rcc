@@ -112,6 +112,7 @@ impl Tokenizer {
             "short" => TokenKind::Short,
             "long" => TokenKind::Long,
             "enum" => TokenKind::Enum,
+            "static" => TokenKind::Static,
             _ => TokenKind::Ident(s),
         }, start_col, self.col);
     }

@@ -872,7 +872,7 @@ impl Parser {
         new_stmt!(self, kind)
     }
 
-    fn parse_func_decl(&mut self, ty: Type, ident: String) -> Option<DeclarationKind> {
+    fn parse_func_decl(&mut self, ty: Type, ident: String, is_static: bool) -> Option<DeclarationKind> {
         self.stack_size = 0;
 
         // 引数をパース
@@ -908,11 +908,11 @@ impl Parser {
             None
         } else {
             let stmt = self.parse_stmt();
-            Some(DeclarationKind::Func(ident, ty, args, self.stack_size, stmt))
+            Some(DeclarationKind::Func(ident, ty, args, self.stack_size, stmt, is_static))
         }
     }
 
-    fn parse_global_var_decl(&mut self, ty: Type, ident: String) -> Option<DeclarationKind> {
+    fn parse_global_var_decl(&mut self, ty: Type, ident: String, is_static: bool) -> Option<DeclarationKind> {
         // 添字演算子があったら配列型にする
         let mut ty = ty;
         while let Some(size) = self.expect_subscript() {
@@ -930,7 +930,7 @@ impl Parser {
 
         let variable = Variable::new(ty, Location::Global(ident.clone()));
         self.global_variables.insert(ident.clone(), variable.clone());
-        Some(DeclarationKind::GlobalVariable(variable, initializer))
+        Some(DeclarationKind::GlobalVariable(variable, initializer, is_static))
     }
 
     pub fn parse_declaration(&mut self) -> Option<Declaration> {
@@ -952,6 +952,9 @@ impl Parser {
             return None;
         }
 
+        // staticがあるかどうか
+        let is_static = self.consume(TokenKind::Static);
+
         // 型
         let ty = self.expect_type(true);
 
@@ -967,10 +970,10 @@ impl Parser {
             if let Some(ident) = ident {
                 if self.consume(TokenKind::Lparen) {
                     // 識別子の次のトークンが開きカッコだったら関数定義としてパースする
-                    self.parse_func_decl(ty, ident)
+                    self.parse_func_decl(ty, ident, is_static)
                 } else {
                     // 開きカッコではなかったらグローバル変数定義としてパースする
-                    self.parse_global_var_decl(ty, ident)
+                    self.parse_global_var_decl(ty, ident, is_static)
                 }
             } else {
                 self.add_error("識別子ではありません");

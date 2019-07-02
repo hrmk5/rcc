@@ -48,6 +48,7 @@ pub enum TokenKind {
     Short,
     Long,
     Enum,
+    Static,
 }
 
 impl ToString for TokenKind {
@@ -101,6 +102,7 @@ impl ToString for TokenKind {
             TokenKind::Short => "short",
             TokenKind::Long => "long",
             TokenKind::Enum => "enum",
+            TokenKind::Static => "static",
         })
     }
 }

@@ -168,7 +168,7 @@ impl Analyzer {
 
     fn walk_declaration(&mut self, declaration: &mut Declaration) {
         match &mut declaration.kind {
-            DeclarationKind::Func(name, ty, args, _, stmt) => {
+            DeclarationKind::Func(name, ty, args, _, stmt, _) => {
                 let function = Function::new(ty.clone(), args.clone().into_iter().map(|var| var.ty).collect());
                 self.functions.insert(name.clone(), function);
 
@@ -179,8 +179,8 @@ impl Analyzer {
                     self.add_error("関数の本体がブロックではありません", &stmt.span);
                 }
             },
-            DeclarationKind::GlobalVariable(_, Some(init_expr)) => self.walk_initializer(init_expr),
-            DeclarationKind::GlobalVariable(_, _) => {},
+            DeclarationKind::GlobalVariable(_, Some(init_expr), _) => self.walk_initializer(init_expr),
+            DeclarationKind::GlobalVariable(_, _, _) => {},
             DeclarationKind::Prototype(name, return_type, args) => {
                 self.functions.insert(name.clone(), Function::new(return_type.clone(), args.clone()));
             },
