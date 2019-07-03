@@ -932,55 +932,51 @@ impl Parser {
         Some(DeclarationKind::GlobalVariable(variable, initializer, is_static))
     }
 
+    pub fn parse_var_or_func_decl(&mut self, ty: Type, is_static: bool) -> Option<DeclarationKind> {
+        // セミコロンだったら構造体などの定義
+        if self.consume(TokenKind::Semicolon) {
+            return None;
+        }
+
+        // 識別子
+        if let TokenKind::Ident(ident) = self.get_token().clone() {
+            self.pos += 1;
+            if self.consume(TokenKind::Lparen) {
+                // 識別子の次のトークンが開きカッコだったら関数定義としてパースする
+                self.parse_func_decl(ty, ident, is_static)
+            } else {
+                // 開きカッコではなかったらグローバル変数定義としてパースする
+                self.parse_global_var_decl(ty, ident, is_static)
+            }
+        } else {
+            self.add_error("識別子ではありません");
+            None
+        }
+    }
+
     pub fn parse_declaration(&mut self) -> Option<Declaration> {
         self.push_start_token();
-
-        // typedef
-        if let TokenKind::Typedef = self.get_token() {
-            self.pos += 1;
-            self.pop_token();
-            self.parse_typedef(true);
-            return None;
-        }
-
-        // enum
-        if let TokenKind::Enum = self.get_token() {
-            self.pos += 1;
-            self.pop_token();
-            self.parse_enum(true);
-            return None;
-        }
 
         // staticがあるかどうか
         let is_static = self.consume(TokenKind::Static);
 
-        // 型
-        let ty = self.expect_type(true);
-
-        // セミコロンだったら構造体などの定義
-        if self.consume(TokenKind::Semicolon) {
-            self.pop_token();
-            return None;
-        }
-
-        let kind = if let Some(ty) = ty {
-            // 識別子
-            let ident = self.expect_ident();
-            if let Some(ident) = ident {
-                if self.consume(TokenKind::Lparen) {
-                    // 識別子の次のトークンが開きカッコだったら関数定義としてパースする
-                    self.parse_func_decl(ty, ident, is_static)
-                } else {
-                    // 開きカッコではなかったらグローバル変数定義としてパースする
-                    self.parse_global_var_decl(ty, ident, is_static)
-                }
-            } else {
-                self.add_error("識別子ではありません");
+        let kind = match self.get_token() {
+            TokenKind::Typedef => {
+                self.pos += 1;
+                self.parse_typedef(true);
                 None
-            }
-        } else {
-            self.add_error("型ではありません");
-            None
+            },
+            TokenKind::Enum => {
+                self.pos += 1;
+                self.parse_enum(true);
+                None
+            },
+            _ => if let Some(ty) = self.expect_type(false) {
+                self.parse_var_or_func_decl(ty, is_static)
+            } else {
+                self.add_error("型ではありません");
+                None
+            },
         };
 
         if let Some(kind) = kind {
