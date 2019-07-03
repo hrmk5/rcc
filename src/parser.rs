@@ -155,14 +155,13 @@ impl Parser {
         ExprKind::Invalid
     }
 
-    fn get_token(&mut self) -> TokenKind {
-        self.tokens[self.pos].kind.clone()
+    fn get_token(&mut self) -> &TokenKind {
+        &self.tokens[self.pos].kind
     }
 
-    fn get_token_and_next(&mut self) -> TokenKind {
-        let kind = self.get_token();
+    fn get_token_and_next(&mut self) -> &TokenKind {
         self.pos += 1;
-        kind
+        &self.tokens[self.pos - 1].kind
     }
 
     fn find_struct(&self, name: &str) -> Option<Type> {
@@ -423,7 +422,7 @@ impl Parser {
     fn parse_term(&mut self) -> Expr {
         self.push_start_token();
 
-        let mut expr = match self.get_token_and_next() {
+        let mut expr = match self.get_token_and_next().clone() {
             TokenKind::Lparen => {
                 self.pop_token();
                 let expr = self.parse_expr();
@@ -818,7 +817,7 @@ impl Parser {
                 if let Some(ident) = self.expect_ident() {
                     if self.consume(TokenKind::Assign) {
                         if let TokenKind::Number(num) = self.get_token_and_next() {
-                            n = num as i64;
+                            n = *num as i64;
                         } else {
                             self.add_error_token("", self.pos - 1);
                         }
