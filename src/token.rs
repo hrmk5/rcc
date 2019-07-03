@@ -49,6 +49,9 @@ pub enum TokenKind {
     Long,
     Enum,
     Static,
+    Switch,
+    Case,
+    Colon,
 }
 
 impl ToString for TokenKind {
@@ -103,6 +106,9 @@ impl ToString for TokenKind {
             TokenKind::Long => "long",
             TokenKind::Enum => "enum",
             TokenKind::Static => "static",
+            TokenKind::Switch => "switch",
+            TokenKind::Case => "case",
+            TokenKind::Colon => ":",
         })
     }
 }

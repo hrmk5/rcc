@@ -175,6 +175,8 @@ pub enum StmtKind {
     For(Option<Box<Stmt>>, Option<Expr>, Option<Expr>, Box<Stmt>),
     Block(Vec<Stmt>),
     Define(Variable, Option<Initializer>),
+    Switch(Expr, Vec<Expr>, Box<Stmt>),
+    Case(Expr),
 }
 
 #[derive(Debug)]

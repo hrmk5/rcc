@@ -4,6 +4,7 @@ pub struct Generator {
     pub code: String,
     label_num: u32,
     has_return: bool,
+    case_labels_iter: Box<dyn Iterator<Item = u32>>,
 }
 
 const ARG_REGISTERS: [&str; 6] = ["r9", "r8", "rcx", "rdx", "rsi", "rdi"];
@@ -41,6 +42,7 @@ impl Generator {
             code: String::new(),
             label_num: 0,
             has_return: false,
+            case_labels_iter: Box::new(Vec::new().into_iter()),
         }
     }
 
@@ -459,8 +461,35 @@ impl Generator {
         }
     }
 
+    fn gen_switch_stmt(&mut self, expr: Expr, cases: Vec<Expr>, stmt: Stmt) {
+        self.label_num += 1;
+        let label_num = self.label_num;
+
+        self.gen_expr(expr);
+        add_mnemonic!(self, "pop rax");
+
+        let mut case_labels = Vec::new();
+        for case in cases {
+            self.label_num += 1;
+            case_labels.push(self.label_num);
+
+            self.gen_expr(case);
+            add_mnemonic!(self, "pop rbx");
+            add_mnemonic!(self, "cmp rax, rbx");
+            add_mnemonic!(self, "je .Lcase{}", self.label_num);
+        }
+        self.case_labels_iter = Box::new(case_labels.into_iter());
+
+        add_mnemonic!(self, "jmp .Lend{}", label_num);
+        self.gen_stmt(stmt);
+        add_label!(self, ".Lend", label_num)
+    }
+
+    fn gen_case_stmt(&mut self) {
+        add_label!(self, ".Lcase", self.case_labels_iter.next().unwrap());
+    }
+
     fn gen_stmt(&mut self, stmt: Stmt) {
-        #[allow(unreachable_patterns)]
         match stmt.kind {
             StmtKind::Expr(expr) => self.gen_expr_stmt(expr),
             StmtKind::Return(expr) => self.gen_return_stmt(expr),
@@ -469,7 +498,8 @@ impl Generator {
             StmtKind::For(init, cond, loop_expr, stmt) => self.gen_for_stmt(init, cond, loop_expr, *stmt),
             StmtKind::Define(variable, initializer) => self.gen_define_stmt(variable, initializer),
             StmtKind::Block(stmt_list) => self.gen_block_stmt(stmt_list),
-            _ => {},
+            StmtKind::Switch(expr, cases, stmt) => self.gen_switch_stmt(expr, cases, *stmt),
+            StmtKind::Case(_) => self.gen_case_stmt(),
         }
     }
 

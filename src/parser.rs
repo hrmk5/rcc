@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::mem;
 
 use crate::token::*;
 use crate::ast::*;
@@ -23,6 +24,7 @@ pub struct Parser {
     pos: usize,
     stack_size: usize,
     start_token_stack: Vec<Token>,
+    cases: Vec<Expr>,
 }
 
 macro_rules! expect {
@@ -103,6 +105,7 @@ impl Parser {
             string_list: Vec::new(),
             stack_size: 0,
             start_token_stack: Vec::new(),
+            cases: Vec::new(),
         }
     }
 
@@ -843,6 +846,25 @@ impl Parser {
         expect!(self, TokenKind::Semicolon);
     }
 
+    fn parse_switch_stmt(&mut self) -> StmtKind {
+        expect!(self, TokenKind::Lparen);
+        let expr = self.parse_expr();
+        expect!(self, TokenKind::Rparen);
+
+        let stmt = self.parse_stmt();
+
+        // self.casesの取得とリセット
+        let cases = mem::replace(&mut self.cases, Vec::new());
+        StmtKind::Switch(expr, cases, Box::new(stmt))
+    }
+
+    fn parse_case_stmt(&mut self) -> StmtKind {
+        let expr = self.parse_expr();
+        self.cases.push(expr.clone());
+        expect!(self, TokenKind::Colon);
+        StmtKind::Case(expr)
+    }
+
     fn parse_stmt(&mut self) -> Stmt {
         self.push_start_token();
         if let Some(kind) = self.expect_define_stmt() {
@@ -854,6 +876,8 @@ impl Parser {
             TokenKind::If => self.parse_if_stmt(),
             TokenKind::While => self.parse_while_stmt(),
             TokenKind::For => self.parse_for_stmt(),
+            TokenKind::Switch => self.parse_switch_stmt(),
+            TokenKind::Case => self.parse_case_stmt(),
             TokenKind::Lbrace => self.parse_block_stmt(),
             TokenKind::Typedef => {
                 self.parse_typedef(false);
