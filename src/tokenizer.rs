@@ -115,6 +115,7 @@ impl Tokenizer {
             "static" => TokenKind::Static,
             "switch" => TokenKind::Switch,
             "case" => TokenKind::Case,
+            "break" => TokenKind::Break,
             _ => TokenKind::Ident(s),
         }, start_col, self.col);
     }

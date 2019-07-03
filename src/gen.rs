@@ -5,6 +5,7 @@ pub struct Generator {
     label_num: u32,
     has_return: bool,
     case_labels_iter: Box<dyn Iterator<Item = u32>>,
+    break_label_num: u32,
 }
 
 const ARG_REGISTERS: [&str; 6] = ["r9", "r8", "rcx", "rdx", "rsi", "rdi"];
@@ -43,6 +44,7 @@ impl Generator {
             label_num: 0,
             has_return: false,
             case_labels_iter: Box::new(Vec::new().into_iter()),
+            break_label_num: 0,
         }
     }
 
@@ -468,6 +470,7 @@ impl Generator {
         self.gen_expr(expr);
         add_mnemonic!(self, "pop rax");
 
+        // caseにジャンプする処理
         let mut case_labels = Vec::new();
         for case in cases {
             self.label_num += 1;
@@ -480,6 +483,9 @@ impl Generator {
         }
         self.case_labels_iter = Box::new(case_labels.into_iter());
 
+        // breakする先のラベルの番号
+        self.break_label_num = label_num;
+
         add_mnemonic!(self, "jmp .Lend{}", label_num);
         self.gen_stmt(stmt);
         add_label!(self, ".Lend", label_num)
@@ -487,6 +493,10 @@ impl Generator {
 
     fn gen_case_stmt(&mut self) {
         add_label!(self, ".Lcase", self.case_labels_iter.next().unwrap());
+    }
+
+    fn gen_break_stmt(&mut self) {
+        add_mnemonic!(self, "jmp .Lend{}", self.break_label_num);
     }
 
     fn gen_stmt(&mut self, stmt: Stmt) {
@@ -500,6 +510,7 @@ impl Generator {
             StmtKind::Block(stmt_list) => self.gen_block_stmt(stmt_list),
             StmtKind::Switch(expr, cases, stmt) => self.gen_switch_stmt(expr, cases, *stmt),
             StmtKind::Case(_) => self.gen_case_stmt(),
+            StmtKind::Break => self.gen_break_stmt(),
         }
     }
 

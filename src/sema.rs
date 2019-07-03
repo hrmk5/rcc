@@ -124,25 +124,29 @@ impl Analyzer {
         }
     }
 
-    fn walk_stmt(&mut self, stmt: &mut Stmt, allow_case: bool) {
+    fn walk_stmt_default(&mut self, stmt: &mut Stmt) {
+        self.walk_stmt(stmt, false, false);
+    }
+
+    fn walk_stmt(&mut self, stmt: &mut Stmt, allow_case: bool, allow_break: bool) {
         match &mut stmt.kind {
             StmtKind::Expr(expr) => self.walk_expr(expr),
             StmtKind::If(cond, stmt, else_stmt) => {
                 self.walk_expr(cond);
-                self.walk_stmt(stmt, false);
+                self.walk_stmt_default(stmt);
                 if let Some(else_stmt) = else_stmt {
-                    self.walk_stmt(else_stmt, false);
+                    self.walk_stmt_default(else_stmt);
                 }
             },
             StmtKind::For(init_stmt, cond, loop_expr, stmt) => {
-                if let Some(stmt) = init_stmt { self.walk_stmt(stmt, false) };
+                if let Some(stmt) = init_stmt { self.walk_stmt_default(stmt) };
                 if let Some(cond) = cond { self.walk_expr(cond) };
                 if let Some(stmt) = loop_expr { self.walk_expr(stmt) };
-                self.walk_stmt(stmt, false);
+                self.walk_stmt_default(stmt);
             },
             StmtKind::While(cond, stmt) => {
                 self.walk_expr(cond);
-                self.walk_stmt(stmt, false);
+                self.walk_stmt_default(stmt);
             },
             StmtKind::Return(expr) => {
                 self.walk_expr(expr);
@@ -160,24 +164,27 @@ impl Analyzer {
             },
             StmtKind::Block(stmt_list) => {
                 for stmt in stmt_list {
-                    if !allow_case {
-                        if let StmtKind::Case(_) = stmt.kind {
-                            self.add_error("switch文の中以外でcaseは使用できません", &stmt.span)
-                        }
-                    }
-
-                    self.walk_stmt(stmt, allow_case);
+                    self.walk_stmt(stmt, allow_case, allow_break);
                 }
             },
             StmtKind::Switch(expr, _, stmt) => {
                 // TODO: exprが整数ではないとエラーを出す
                 self.walk_expr(expr);
-                self.walk_stmt(stmt, true);
+                self.walk_stmt(stmt, true, true);
             },
             StmtKind::Case(expr) => {
+                if !allow_case {
+                    self.add_error("switch文の中以外でcaseは使用できません", &stmt.span)
+                }
+
                 // TODO: exprが整数ではないとエラーを出す
                 self.walk_expr(expr);
             }
+            StmtKind::Break => {
+                if !allow_break {
+                    self.add_error("switch文かループの中以外でbreakは使用できません", &stmt.span);
+                }
+            },
         }
     }
 
@@ -189,7 +196,7 @@ impl Analyzer {
 
                 // 本体がブロックではない場合はエラー
                 if let StmtKind::Block(_) = stmt.kind {
-                    self.walk_stmt(stmt, false);
+                    self.walk_stmt_default(stmt);
                 } else {
                     self.add_error("関数の本体がブロックではありません", &stmt.span);
                 }

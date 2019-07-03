@@ -176,6 +176,7 @@ pub enum StmtKind {
     Block(Vec<Stmt>),
     Define(Variable, Option<Initializer>),
     Switch(Expr, Vec<Expr>, Box<Stmt>),
+    Break,
     Case(Expr),
 }
 

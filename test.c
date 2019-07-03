@@ -116,6 +116,19 @@ int main() {
     }
     expect("for 2", 25, num);
 
+    int num2 = 0;
+    switch (num2) {
+        case 0:
+            num2 = 10;
+        case 1:
+            num2 = 15;
+            break;
+        case 2:
+            num2 = 20;
+            break;
+    }
+    expect("switch", 15, num2);
+
     int *c;
     c = &a;
     *c = 10;

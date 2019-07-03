@@ -878,6 +878,10 @@ impl Parser {
             TokenKind::For => self.parse_for_stmt(),
             TokenKind::Switch => self.parse_switch_stmt(),
             TokenKind::Case => self.parse_case_stmt(),
+            TokenKind::Break => {
+                expect!(self, TokenKind::Semicolon);
+                StmtKind::Break
+            },
             TokenKind::Lbrace => self.parse_block_stmt(),
             TokenKind::Typedef => {
                 self.parse_typedef(false);

@@ -52,6 +52,7 @@ pub enum TokenKind {
     Switch,
     Case,
     Colon,
+    Break,
 }
 
 impl ToString for TokenKind {
@@ -109,6 +110,7 @@ impl ToString for TokenKind {
             TokenKind::Switch => "switch",
             TokenKind::Case => "case",
             TokenKind::Colon => ":",
+            TokenKind::Break => "break",
         })
     }
 }
