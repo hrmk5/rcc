@@ -774,21 +774,51 @@ impl Parser {
     }
 
     fn expect_define_stmt(&mut self) -> Option<StmtKind> {
-        // 変数定義
-        let variable = self.expect_define(false, false);
-        if let Some(variable) = variable {
-            // = があったら初期化式をパース
-            let initializer = if self.consume(TokenKind::Assign) {
-                Some(self.parse_initializer())
-            } else {
-                None
-            };
+        let ty = self.expect_type(false)?;
+        let ident = self.expect_ident().or_else(|| { self.add_error("識別子ではありません"); None })?;
 
-            expect!(self, TokenKind::Semicolon);
-            Some(StmtKind::Define(variable, initializer))
+        // 添字演算子があったら配列型にする
+        let mut ty = ty;
+        // 要素数を省略した配列の要素の型へのポインタ
+        let first_ty = &mut ty as *mut Type;
+        // 要素数を省略した時に出すエラーの位置
+        let pos = self.pos + 1;
+
+        // 要素数を省略しているかどうか
+        let is_omitted = if let (TokenKind::Lbracket, TokenKind::Rbracket) = (self.get_token().clone(), &self.tokens[self.pos + 1].kind) {
+            self.pos += 2;
+            true
+        } else {
+            false
+        };
+
+        // 添字演算子をパース
+        while let Some(size) = self.expect_subscript() {
+            ty = Type::Array(Box::new(ty), size);
+        }
+
+        // = があったら初期化式をパース
+        let initializer = if self.consume(TokenKind::Assign) {
+            Some(self.parse_initializer())
         } else {
             None
+        };
+
+        // 要素数を省略していたら初期化リスト内の式の数を要素数にする
+        if is_omitted {
+            if let Some(Initializer { kind: InitializerKind::List(initializers), .. }) = &initializer {
+                unsafe {
+                    *first_ty = Type::Array(Box::new((*first_ty).clone()), initializers.len());
+                }
+            } else {
+                self.add_error_token("要素数は省略できません", pos);
+            }
         }
+
+        expect!(self, TokenKind::Semicolon);
+
+        let var = self.define_variable(&ident, &ty, false);
+        Some(StmtKind::Define(var, initializer))
     }
 
     fn parse_typedef(&mut self, is_global: bool) {

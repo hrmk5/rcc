@@ -187,6 +187,8 @@ int main() {
     expect("initialization expression 2", 69, text2[1]);
     int arr2[5] = { 5, 3, 9, 3, 7 };
     expect("initializer list", 9, arr2[2]);
+    int arr3[] = { 3, 9, 13, 51, 6 };
+    expect("initializer list 2", 26, arr3[4] + sizeof(arr3));
 
     expect("objlike macro", 10, MACRO);
     MACRO2;
