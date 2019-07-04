@@ -37,6 +37,7 @@ int global_arr2[3][3] = {
     { 6, 3 },
     { 9, 10, 32 }
 };
+int global_arr3[] = { 40, 23, 31, 3 };
 
 struct Foo {
     char a;
@@ -174,6 +175,7 @@ int main() {
     expect("global variable of string", 101, global_text[1]);
     expect("global variable with initializer list", 95, global_arr[2]);
     expect("global variable with initializer list 2", 32, global_arr2[1][2]);
+    expect("global variable with initializer list 3", 16, sizeof(global_arr3));
 
     char *text;
     text = "hello";

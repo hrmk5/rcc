@@ -942,6 +942,18 @@ impl Parser {
     fn parse_global_var_decl(&mut self, ty: Type, ident: String, is_static: bool) -> Option<DeclarationKind> {
         // 添字演算子があったら配列型にする
         let mut ty = ty;
+        let first_ty = &mut ty as *mut Type;
+        let pos = self.pos + 1;
+
+        // 要素数を省略しているかどうか
+        let is_omitted = if let (TokenKind::Lbracket, TokenKind::Rbracket) = (self.get_token().clone(), &self.tokens[self.pos + 1].kind) {
+            self.pos += 2;
+            true
+        } else {
+            false
+        };
+
+        // 添字演算子をパース
         while let Some(size) = self.expect_subscript() {
             ty = Type::Array(Box::new(ty), size);
         }
@@ -952,6 +964,17 @@ impl Parser {
         } else {
             None
         };
+
+        // 要素数を省略していたら初期化リスト内の式の数を要素数にする
+        if is_omitted {
+            if let Some(Initializer { kind: InitializerKind::List(initializers), .. }) = &initializer {
+                unsafe {
+                    *first_ty = Type::Array(Box::new((*first_ty).clone()), initializers.len());
+                }
+            } else {
+                self.add_error_token("要素数は省略できません", pos);
+            }
+        }
 
         expect!(self, TokenKind::Semicolon);
 
