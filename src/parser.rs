@@ -1052,6 +1052,11 @@ impl Parser {
                 self.parse_enum(true);
                 None
             },
+            TokenKind::Extern => {
+                self.pos += 1;
+                self.parse_declaration();
+                None
+            }
             _ => if let Some(ty) = self.expect_type(false) {
                 self.parse_var_or_func_decl(ty, is_static)
             } else {

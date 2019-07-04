@@ -53,6 +53,7 @@ pub enum TokenKind {
     Case,
     Colon,
     Break,
+    Extern,
 }
 
 impl ToString for TokenKind {
@@ -111,6 +112,7 @@ impl ToString for TokenKind {
             TokenKind::Case => "case",
             TokenKind::Colon => ":",
             TokenKind::Break => "break",
+            TokenKind::Extern => "extern",
         })
     }
 }

@@ -199,6 +199,21 @@ pub struct Declaration {
     pub span: Span,
 }
 
+impl Declaration {
+    // 識別子を取得する
+    #[allow(dead_code)]
+    pub fn get_identifier(&self) -> String {
+        match &self.kind {
+            DeclarationKind::Func(name, _, _, _, _, _) => name,
+            DeclarationKind::GlobalVariable(var, _, _) => match &var.location {
+                Location::Global(name) => name,
+                _ => panic!(),
+            },
+            DeclarationKind::Prototype(name, _, _) => name,
+        }.clone()
+    }
+}
+
 #[derive(Debug)]
 pub struct Program {
     pub declarations: Vec<Declaration>,
