@@ -5,17 +5,19 @@ use crate::error::{CompileError, Span};
 struct Preprocessor {
     tokens: Vec<Token>,
     objlike_macros: HashMap<String, Vec<Token>>,
-    iter: Box<dyn Iterator<Item = Token>>,
+    input: Vec<Token>,
+    pos: usize,
     errors: Vec<CompileError>,
 }
 
 impl Preprocessor {
-    fn new(input: impl Iterator<Item = Token> + 'static) -> Self {
+    fn new(input: Vec<Token>) -> Self {
         Self {
             tokens: Vec::new(),
             objlike_macros: HashMap::new(),
-            iter: Box::new(input),
+            input,
             errors: Vec::new(),
+            pos: 0,
         }
     }
 
@@ -26,19 +28,13 @@ impl Preprocessor {
         });
     }
 
-    fn define_objlike(&mut self, name: String) {
-        let mut tokens: Vec<Token> = Vec::new();
-        loop {
-            match self.iter.next() {
-                Some(token) => match token.kind {
-                    TokenKind::NewLine | TokenKind::EOF => break,
-                    _ => tokens.push(token),
-                },
-                None => panic!(),
-            };
-        }
+    // fn curr(&self) -> &Token {
+    //     &self.input[self.pos]
+    // }
 
-        self.objlike_macros.insert(name, tokens);
+    fn next(&mut self) -> &Token {
+        self.pos += 1;
+        &self.input[self.pos - 1]
     }
 
     fn apply_objlike(&mut self, name: String) {
@@ -51,19 +47,33 @@ impl Preprocessor {
         }
     }
 
+    fn define_objlike(&mut self, name: String) {
+        let mut tokens: Vec<Token> = Vec::new();
+        loop {
+            let token = self.next();
+            if let TokenKind::NewLine | TokenKind::EOF = token.kind {
+                break;
+            }
+
+            tokens.push(token.clone())
+        }
+
+        self.objlike_macros.insert(name, tokens);
+    }
+
     fn define_macro(&mut self) {
         // `#` を消費
-        self.iter.next().unwrap();
+        self.next();
 
-        match self.iter.next() {
-            Some(Token { kind: TokenKind::Ident(name), .. }) => self.define_objlike(name),
-            Some(token) => self.add_error("識別子ではありません", &token),
-            _ => panic!(),
+        match self.next().clone() {
+            Token { kind: TokenKind::Ident(name), .. } => self.define_objlike(name),
+            token => self.add_error("識別子ではありません", &token),
         };
     }
 
     fn preprocess(mut self) -> Result<Vec<Token>, Vec<CompileError>> {
-        while let Some(token) = self.iter.next() {
+        loop {
+            let token = self.next().clone();
             match token.kind {
                 TokenKind::Hash => self.define_macro(),
                 TokenKind::Ident(name) if self.objlike_macros.contains_key(&name) => self.apply_objlike(name),
@@ -82,6 +92,6 @@ impl Preprocessor {
 }
 
 pub fn preprocess(input: Vec<Token>) -> Result<Vec<Token>, Vec<CompileError>> {
-    let preprossor = Preprocessor::new(input.into_iter());
+    let preprossor = Preprocessor::new(input);
     preprossor.preprocess()
 }
