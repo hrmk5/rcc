@@ -43,15 +43,6 @@ impl Preprocessor {
         &self.input[self.pos - 1]
     }
 
-    fn consume(&mut self, kind: TokenKind) -> bool {
-        if self.curr().kind == kind {
-            self.pos += 1;
-            true
-        } else {
-            false
-        }
-    }
-
     fn expect(&mut self, kind: TokenKind) {
         let token = self.next().clone();
         if token.kind != kind {

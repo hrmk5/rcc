@@ -27,6 +27,7 @@ void no_return() {
 
 #define MACRO 10
 #define MACRO2 expect("nested macro", 15, MACRO + 5)
+#define ADD(a, b) a + b
 
 int global_var;
 int global_a = 10;
@@ -192,6 +193,7 @@ int main() {
 
     expect("objlike macro", 10, MACRO);
     MACRO2;
+    expect("macro function", 31, ADD(23, 8));
 
     foo1.a = 53;
     foo1.b = 31;
