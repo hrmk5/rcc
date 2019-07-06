@@ -43,6 +43,50 @@ impl Preprocessor {
         &self.input[self.pos - 1]
     }
 
+    fn consume(&mut self, kind: TokenKind) -> bool {
+        if self.curr().kind == kind {
+            self.pos += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn expect(&mut self, kind: TokenKind) {
+        let token = self.next().clone();
+        if token.kind != kind {
+            self.add_error(&format!("Expected `{}`", kind.to_string()), &token);
+        }
+    }
+
+    fn get_arguments(&mut self) -> Vec<Vec<Token>> {
+        let mut arguments = Vec::new();
+        if let TokenKind::Rparen = self.curr().kind {
+            self.next();
+        } else {
+            let mut tokens = Vec::new();
+            loop {
+                let token = self.next().clone();
+                match token.kind {
+                    TokenKind::Comma => {
+                        arguments.push(tokens.clone());
+                        tokens.clear();
+                    },
+                    TokenKind::Rparen => {
+                        arguments.push(tokens);
+                        break;
+                    },
+                    TokenKind::EOF => {
+                        self.add_error("Unterminated argument list", &token);
+                        return Vec::new();
+                    },
+                    _ => tokens.push(token),
+                }
+            }
+        }
+        arguments
+    }
+
     fn apply(&mut self, name: String) {
         match self.macros[&name].clone() {
             Macro::ObjLike(tokens) => {
@@ -53,7 +97,29 @@ impl Preprocessor {
                     };
                 }
             },
-            _ => {},
+            Macro::FuncLike(params, tokens) => {
+                self.expect(TokenKind::Lparen);
+                let macro_pos = self.pos;
+                let arguments = self.get_arguments();
+                if params.len() != arguments.len() {
+                    self.add_error(&format!("Passed {} arguments, but macro takes just {}", arguments.len(), params.len()), &self.input[macro_pos].clone());
+                    return;
+                }
+
+                for token in tokens {
+                    match token.kind {
+                        TokenKind::Ident(name) => {
+                            let index = params.iter().position(|param| param.clone() == name);
+                            if let Some(index) = index {
+                                self.tokens.extend_from_slice(&arguments[index]);
+                            } else if self.macros.contains_key(&name) {
+                                self.apply(name);
+                            }
+                        },
+                        _ => self.tokens.push(token),
+                    };
+                }
+            },
         };
     }
 
@@ -77,7 +143,7 @@ impl Preprocessor {
     
     fn get_params(&mut self) -> Vec<String> {
         let mut params = Vec::new();
-        if let TokenKind::Lparen = self.curr().kind {
+        if let TokenKind::Rparen = self.curr().kind {
             self.next();
         } else {
             loop {
@@ -137,8 +203,6 @@ impl Preprocessor {
             };
         }
 
-        println!("{:?}", self.macros);
-        
         if self.errors.is_empty() {
             Ok(self.tokens)
         } else {
