@@ -408,6 +408,7 @@ impl Generator {
         add_mnemonic!(self, "je .Lend{}", label_num);
 
         // 文
+        self.break_label_num = label_num;
         self.gen_stmt(stmt);
         add_mnemonic!(self, "jmp .Lbegin{}", label_num);
 
@@ -434,6 +435,7 @@ impl Generator {
         }
 
         // 文
+        self.break_label_num = label_num;
         self.gen_stmt(stmt);
 
         if let Some(loop_expr) = loop_expr {

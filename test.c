@@ -106,17 +106,22 @@ int main() {
     b = 0;
     while (b < 5) {
         b = b + 1;
+        if (b == 4) {
+          break;
+        }
     }
-    expect("while", 5, b);
+    expect("while", 4, b);
     int i;
     for (i = 0; i < 10; i = i + 1) {
     }
     expect("for", 10, i);
     int num = 0;
     for (int j = 0; j < 5; j = j + 1) {
+        if (j == 4)
+           break;
         num = num + 5;
     }
-    expect("for 2", 25, num);
+    expect("for 2", 20, num);
 
     int num2 = 0;
     switch (num2) {
@@ -188,8 +193,8 @@ int main() {
     expect("initialization expression 2", 69, text2[1]);
     int arr2[5] = { 5, 3, 9, 3, 7 };
     expect("initializer list", 9, arr2[2]);
-    int arr3[] = { 3, 9, 13, 51, 6 };
-    expect("initializer list 2", 26, arr3[4] + sizeof(arr3));
+    int arr4[] = { 3, 9, 13, 51, 6 };
+    expect("initializer list 2", 26, arr4[4] + sizeof(arr4));
 
     expect("objlike macro", 10, MACRO);
     MACRO2;

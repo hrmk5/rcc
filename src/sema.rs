@@ -124,29 +124,25 @@ impl Analyzer {
         }
     }
 
-    fn walk_stmt_default(&mut self, stmt: &mut Stmt) {
-        self.walk_stmt(stmt, false, false);
-    }
-
     fn walk_stmt(&mut self, stmt: &mut Stmt, allow_case: bool, allow_break: bool) {
         match &mut stmt.kind {
             StmtKind::Expr(expr) => self.walk_expr(expr),
             StmtKind::If(cond, stmt, else_stmt) => {
                 self.walk_expr(cond);
-                self.walk_stmt_default(stmt);
+                self.walk_stmt(stmt, allow_case, allow_break);
                 if let Some(else_stmt) = else_stmt {
-                    self.walk_stmt_default(else_stmt);
+                    self.walk_stmt(else_stmt, allow_case, allow_break);
                 }
             },
             StmtKind::For(init_stmt, cond, loop_expr, stmt) => {
-                if let Some(stmt) = init_stmt { self.walk_stmt_default(stmt) };
+                if let Some(stmt) = init_stmt { self.walk_stmt(stmt, allow_case, allow_break) };
                 if let Some(cond) = cond { self.walk_expr(cond) };
                 if let Some(stmt) = loop_expr { self.walk_expr(stmt) };
-                self.walk_stmt_default(stmt);
+                self.walk_stmt(stmt, allow_case, true);
             },
             StmtKind::While(cond, stmt) => {
                 self.walk_expr(cond);
-                self.walk_stmt_default(stmt);
+                self.walk_stmt(stmt, allow_case, true);
             },
             StmtKind::Return(expr) => {
                 self.walk_expr(expr);
@@ -196,7 +192,7 @@ impl Analyzer {
 
                 // 本体がブロックではない場合はエラー
                 if let StmtKind::Block(_) = stmt.kind {
-                    self.walk_stmt_default(stmt);
+                    self.walk_stmt(stmt, false, false);
                 } else {
                     self.add_error("関数の本体がブロックではありません", &stmt.span);
                 }
