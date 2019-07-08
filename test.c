@@ -105,9 +105,13 @@ int main() {
     int b;
     b = 0;
     while (b < 5) {
+        if (b == 1) {
+            b = b + 2;
+            continue;
+        }
         b = b + 1;
         if (b == 4) {
-          break;
+            break;
         }
     }
     expect("while", 4, b);
@@ -120,9 +124,11 @@ int main() {
         for (int k = 0; k < 5; k = k + 1) {}
         if (j == 4)
            break;
+        else if (j == 0)
+           continue;
         num = num + 5;
     }
-    expect("for 2", 20, num);
+    expect("for 2", 15, num);
 
     int num2 = 0;
     switch (num2) {

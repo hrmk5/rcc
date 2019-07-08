@@ -6,6 +6,7 @@ pub struct Generator {
     has_return: bool,
     case_labels_iter: Box<dyn Iterator<Item = u32>>,
     break_label_stack: Vec<u32>,
+    continue_label_stack: Vec<u32>,
 }
 
 const ARG_REGISTERS: [&str; 6] = ["r9", "r8", "rcx", "rdx", "rsi", "rdi"];
@@ -45,6 +46,7 @@ impl Generator {
             has_return: false,
             case_labels_iter: Box::new(Vec::new().into_iter()),
             break_label_stack: Vec::new(),
+            continue_label_stack: Vec::new(),
         }
     }
 
@@ -400,6 +402,7 @@ impl Generator {
         let label_num = self.label_num;
 
         add_label!(self, ".Lbegin", label_num);
+        add_label!(self, ".Lcontinue", label_num);
 
         // 条件式
         self.gen_expr(expr);
@@ -409,7 +412,9 @@ impl Generator {
 
         // 文
         self.break_label_stack.push(label_num);
+        self.continue_label_stack.push(label_num);
         self.gen_stmt(stmt);
+        self.continue_label_stack.pop().unwrap();
         self.break_label_stack.pop().unwrap();
 
         add_mnemonic!(self, "jmp .Lbegin{}", label_num);
@@ -438,8 +443,12 @@ impl Generator {
 
         // 文
         self.break_label_stack.push(label_num);
+        self.continue_label_stack.push(label_num);
         self.gen_stmt(stmt);
+        self.continue_label_stack.pop().unwrap();
         self.break_label_stack.pop().unwrap();
+
+        add_label!(self, ".Lcontinue", label_num);
 
         if let Some(loop_expr) = loop_expr {
             self.gen_expr(loop_expr);
@@ -505,6 +514,10 @@ impl Generator {
         add_mnemonic!(self, "jmp .Lend{}", self.break_label_stack.last().unwrap());
     }
 
+    fn gen_continue_stmt(&mut self) {
+        add_mnemonic!(self, "jmp .Lcontinue{}", self.continue_label_stack.last().unwrap());
+    }
+
     fn gen_stmt(&mut self, stmt: Stmt) {
         match stmt.kind {
             StmtKind::Expr(expr) => self.gen_expr_stmt(expr),
@@ -517,6 +530,7 @@ impl Generator {
             StmtKind::Switch(expr, cases, stmt) => self.gen_switch_stmt(expr, cases, *stmt),
             StmtKind::Case(_) => self.gen_case_stmt(),
             StmtKind::Break => self.gen_break_stmt(),
+            StmtKind::Continue => self.gen_continue_stmt(),
         }
     }
 

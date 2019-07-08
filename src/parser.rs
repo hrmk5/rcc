@@ -912,6 +912,10 @@ impl Parser {
                 expect!(self, TokenKind::Semicolon);
                 StmtKind::Break
             },
+            TokenKind::Continue => {
+                expect!(self, TokenKind::Semicolon);
+                StmtKind::Continue
+            },
             TokenKind::Lbrace => self.parse_block_stmt(),
             TokenKind::Typedef => {
                 self.parse_typedef(false);

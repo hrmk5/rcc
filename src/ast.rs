@@ -178,6 +178,7 @@ pub enum StmtKind {
     Switch(Expr, Vec<Expr>, Box<Stmt>),
     Break,
     Case(Expr),
+    Continue,
 }
 
 #[derive(Debug)]
