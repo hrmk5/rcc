@@ -117,6 +117,7 @@ int main() {
     expect("for", 10, i);
     int num = 0;
     for (int j = 0; j < 5; j = j + 1) {
+        for (int k = 0; k < 5; k = k + 1) {}
         if (j == 4)
            break;
         num = num + 5;

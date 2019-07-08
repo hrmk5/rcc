@@ -5,7 +5,7 @@ pub struct Generator {
     label_num: u32,
     has_return: bool,
     case_labels_iter: Box<dyn Iterator<Item = u32>>,
-    break_label_num: u32,
+    break_label_stack: Vec<u32>,
 }
 
 const ARG_REGISTERS: [&str; 6] = ["r9", "r8", "rcx", "rdx", "rsi", "rdi"];
@@ -44,7 +44,7 @@ impl Generator {
             label_num: 0,
             has_return: false,
             case_labels_iter: Box::new(Vec::new().into_iter()),
-            break_label_num: 0,
+            break_label_stack: Vec::new(),
         }
     }
 
@@ -408,8 +408,10 @@ impl Generator {
         add_mnemonic!(self, "je .Lend{}", label_num);
 
         // 文
-        self.break_label_num = label_num;
+        self.break_label_stack.push(label_num);
         self.gen_stmt(stmt);
+        self.break_label_stack.pop().unwrap();
+
         add_mnemonic!(self, "jmp .Lbegin{}", label_num);
 
         add_label!(self, ".Lend", label_num);
@@ -435,8 +437,9 @@ impl Generator {
         }
 
         // 文
-        self.break_label_num = label_num;
+        self.break_label_stack.push(label_num);
         self.gen_stmt(stmt);
+        self.break_label_stack.pop().unwrap();
 
         if let Some(loop_expr) = loop_expr {
             self.gen_expr(loop_expr);
@@ -485,11 +488,12 @@ impl Generator {
         }
         self.case_labels_iter = Box::new(case_labels.into_iter());
 
-        // breakする先のラベルの番号
-        self.break_label_num = label_num;
-
         add_mnemonic!(self, "jmp .Lend{}", label_num);
+
+        self.break_label_stack.push(label_num);
         self.gen_stmt(stmt);
+        self.break_label_stack.pop().unwrap();
+
         add_label!(self, ".Lend", label_num)
     }
 
@@ -498,7 +502,7 @@ impl Generator {
     }
 
     fn gen_break_stmt(&mut self) {
-        add_mnemonic!(self, "jmp .Lend{}", self.break_label_num);
+        add_mnemonic!(self, "jmp .Lend{}", self.break_label_stack.last().unwrap());
     }
 
     fn gen_stmt(&mut self, stmt: Stmt) {
