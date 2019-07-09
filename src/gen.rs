@@ -7,6 +7,7 @@ pub struct Generator {
     case_labels_iter: Box<dyn Iterator<Item = u32>>,
     break_label_stack: Vec<u32>,
     continue_label_stack: Vec<u32>,
+    default_label: Vec<u32>,
 }
 
 const ARG_REGISTERS: [&str; 6] = ["r9", "r8", "rcx", "rdx", "rsi", "rdi"];
@@ -47,6 +48,7 @@ impl Generator {
             case_labels_iter: Box::new(Vec::new().into_iter()),
             break_label_stack: Vec::new(),
             continue_label_stack: Vec::new(),
+            default_label: Vec::new(),
         }
     }
 
@@ -477,7 +479,7 @@ impl Generator {
         }
     }
 
-    fn gen_switch_stmt(&mut self, expr: Expr, cases: Vec<Expr>, stmt: Stmt) {
+    fn gen_switch_stmt(&mut self, expr: Expr, cases: Vec<Expr>, stmt: Stmt, has_default: bool) {
         self.label_num += 1;
         let label_num = self.label_num;
 
@@ -497,10 +499,16 @@ impl Generator {
         }
         self.case_labels_iter = Box::new(case_labels.into_iter());
 
-        add_mnemonic!(self, "jmp .Lend{}", label_num);
+        if has_default {
+            add_mnemonic!(self, "jmp .Ldefault{}", label_num);
+        } else {
+            add_mnemonic!(self, "jmp .Lend{}", label_num);
+        }
 
         self.break_label_stack.push(label_num);
+        self.default_label.push(label_num);
         self.gen_stmt(stmt);
+        self.default_label.pop().unwrap();
         self.break_label_stack.pop().unwrap();
 
         add_label!(self, ".Lend", label_num)
@@ -508,6 +516,10 @@ impl Generator {
 
     fn gen_case_stmt(&mut self) {
         add_label!(self, ".Lcase", self.case_labels_iter.next().unwrap());
+    }
+
+    fn gen_default_stmt(&mut self) {
+        add_label!(self, ".Ldefault", self.default_label.last().unwrap());
     }
 
     fn gen_break_stmt(&mut self) {
@@ -527,8 +539,9 @@ impl Generator {
             StmtKind::For(init, cond, loop_expr, stmt) => self.gen_for_stmt(init, cond, loop_expr, *stmt),
             StmtKind::Define(variable, initializer) => self.gen_define_stmt(variable, initializer),
             StmtKind::Block(stmt_list) => self.gen_block_stmt(stmt_list),
-            StmtKind::Switch(expr, cases, stmt) => self.gen_switch_stmt(expr, cases, *stmt),
+            StmtKind::Switch(expr, cases, stmt, has_default) => self.gen_switch_stmt(expr, cases, *stmt, has_default),
             StmtKind::Case(_) => self.gen_case_stmt(),
+            StmtKind::Default => self.gen_default_stmt(),
             StmtKind::Break => self.gen_break_stmt(),
             StmtKind::Continue => self.gen_continue_stmt(),
         }

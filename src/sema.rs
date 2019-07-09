@@ -163,7 +163,7 @@ impl Analyzer {
                     self.walk_stmt(stmt, allow_case, allow_break, allow_continue);
                 }
             },
-            StmtKind::Switch(expr, _, stmt) => {
+            StmtKind::Switch(expr, _, stmt, _) => {
                 // TODO: exprが整数ではないとエラーを出す
                 self.walk_expr(expr);
                 self.walk_stmt(stmt, true, true, allow_continue);
@@ -186,6 +186,7 @@ impl Analyzer {
                     self.add_error("ループの中以外でcontinueは使用できません", &stmt.span);
                 }
             },
+            StmtKind::Default => {},
         }
     }
 

@@ -55,6 +55,7 @@ pub enum TokenKind {
     Break,
     Extern,
     Continue,
+    Default,
 }
 
 impl ToString for TokenKind {
@@ -115,6 +116,7 @@ impl ToString for TokenKind {
             TokenKind::Break => "break",
             TokenKind::Extern => "extern",
             TokenKind::Continue => "continue",
+            TokenKind::Default => "default",
         })
     }
 }

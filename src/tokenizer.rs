@@ -118,6 +118,7 @@ impl Tokenizer {
             "break" => TokenKind::Break,
             "extern" => TokenKind::Extern,
             "continue" => TokenKind::Continue,
+            "default" => TokenKind::Default,
             _ => TokenKind::Ident(s),
         }, start_col, self.col);
     }

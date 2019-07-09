@@ -142,6 +142,13 @@ int main() {
             break;
     }
     expect("switch", 15, num2);
+    switch (3) {
+        case 1:
+            num2 = 2;
+        default:
+            num2 = 5;
+    }
+    expect("switch 2", 5, num2);
 
     int *c;
     c = &a;

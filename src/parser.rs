@@ -25,6 +25,7 @@ pub struct Parser {
     stack_size: usize,
     start_token_stack: Vec<Token>,
     cases: Vec<Expr>,
+    switch_has_default: Vec<bool>,
 }
 
 macro_rules! expect {
@@ -106,6 +107,7 @@ impl Parser {
             stack_size: 0,
             start_token_stack: Vec::new(),
             cases: Vec::new(),
+            switch_has_default: Vec::new(),
         }
     }
 
@@ -881,11 +883,15 @@ impl Parser {
         let expr = self.parse_expr();
         expect!(self, TokenKind::Rparen);
 
+        self.switch_has_default.push(false);
         let stmt = self.parse_stmt();
+
+        let has_default = *self.switch_has_default.last().unwrap();
+        self.switch_has_default.pop().unwrap();
 
         // self.casesの取得とリセット
         let cases = mem::replace(&mut self.cases, Vec::new());
-        StmtKind::Switch(expr, cases, Box::new(stmt))
+        StmtKind::Switch(expr, cases, Box::new(stmt), has_default)
     }
 
     fn parse_case_stmt(&mut self) -> StmtKind {
@@ -893,6 +899,15 @@ impl Parser {
         self.cases.push(expr.clone());
         expect!(self, TokenKind::Colon);
         StmtKind::Case(expr)
+    }
+
+    fn parse_default_stmt(&mut self) -> StmtKind {
+        match self.switch_has_default.last_mut() {
+            Some(has_default) => *has_default = true,
+            None => self.add_error("switch文の中以外では使用できません"),
+        };
+        expect!(self, TokenKind::Colon);
+        StmtKind::Default
     }
 
     fn parse_stmt(&mut self) -> Stmt {
@@ -908,6 +923,7 @@ impl Parser {
             TokenKind::For => self.parse_for_stmt(),
             TokenKind::Switch => self.parse_switch_stmt(),
             TokenKind::Case => self.parse_case_stmt(),
+            TokenKind::Default => self.parse_default_stmt(),
             TokenKind::Break => {
                 expect!(self, TokenKind::Semicolon);
                 StmtKind::Break
