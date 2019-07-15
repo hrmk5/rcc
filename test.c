@@ -1,14 +1,6 @@
-int failed = 0;
+#include "test.h"
 
-int expect(char *name, int expected, int actual) {
-    if (expected == actual) {
-        printf("%s => %d\n", name, actual);
-    } else {
-        printf("Expected %d, but got %d\n", expected, actual);
-        failed = 1;
-    }
-    return 0;
-}
+int failed = 0;
 
 int plus(int a, int b) {
     return a + b;
@@ -24,10 +16,6 @@ int calc() {
 
 void no_return() {
 }
-
-#define MACRO 10
-#define MACRO2 expect("nested macro", 15, MACRO + 5)
-#define ADD(a, b) a + b
 
 int global_var;
 int global_a = 10;
@@ -249,4 +237,14 @@ int main() {
     expect("complex calculation", 128, ((((((1+1)+(1+1))+(1+1)+(1+1))+(((1+1)+(1+1))+(1+1)+(1+1)))+((((1+1)+(1+1))+(1+1)+(1+1))+(((1+1)+(1+1))+(1+1)+(1+1))))+(((((1+1)+(1+1))+(1+1)+(1+1))+(((1+1)+(1+1))+(1+1)+(1+1)))+((((1+1)+(1+1))+(1+1)+(1+1))+(((1+1)+(1+1))+(1+1)+(1+1)))))+((((((1+1)+(1+1))+(1+1)+(1+1))+(((1+1)+(1+1))+(1+1)+(1+1)))+((((1+1)+(1+1))+(1+1)+(1+1))+(((1+1)+(1+1))+(1+1)+(1+1))))+(((((1+1)+(1+1))+(1+1)+(1+1))+(((1+1)+(1+1))+(1+1)+(1+1)))+((((1+1)+(1+1))+(1+1)+(1+1))+(((1+1)+(1+1))+(1+1)+(1+1))))));
 
     return failed;
+}
+
+int expect(char *name, int expected, int actual) {
+    if (expected == actual) {
+        printf("%s => %d\n", name, actual);
+    } else {
+        printf("Expected %d, but got %d\n", expected, actual);
+        failed = 1;
+    }
+    return 0;
 }

@@ -1,5 +1,8 @@
+use std::path::Path;
+use std::fs;
 use std::collections::HashMap;
 use crate::token::*;
+use crate::tokenizer::Tokenizer;
 use crate::error::{CompileError, Span};
 
 #[derive(Debug, Clone)]
@@ -171,18 +174,60 @@ impl Preprocessor {
         self.macros.insert(name, Macro::FuncLike(params, tokens));
     }
 
-    fn define_macro(&mut self) {
-        // `#` を消費
-        self.next();
+    fn tokenize_file(&mut self, path: &Path) -> Vec<Token> {
+        let code = match fs::read_to_string(path) {
+            Ok(code) => code,
+            Err(err) => {
+                self.add_error(&format!("{}", err), &self.curr().clone());
+                return Vec::new();
+            },
+        };
 
+        let tokenizer = Tokenizer::new(&code);
+        match tokenizer.tokenize() {
+            Ok(tokens) => tokens,
+            Err(errors) => {
+                self.errors.extend(errors.into_iter());
+                Vec::new()
+            },
+        }
+    }
+
+    fn include(&mut self) {
         match self.next().clone() {
-            Token { kind: TokenKind::Ident(name), .. } if self.curr().kind == TokenKind::Lparen => self.define_funclike(name),
-            Token { kind: TokenKind::Ident(name), .. } => self.define_objlike(name),
+            Token { kind: TokenKind::String(path), .. } => {
+                let tokens = self.tokenize_file(Path::new(&path));
+                let mut preprocessor = Self::new(tokens);
+                match preprocessor.preprocess() {
+                    Ok(mut tokens) => {
+                        // Remove EOF
+                        tokens.pop().unwrap();
+                        self.tokens.extend(tokens.into_iter());
+                        self.macros.extend(preprocessor.macros.into_iter());
+                    },
+                    Err(errors) => self.errors.extend(errors.into_iter()),
+                };
+            },
+            token => self.add_error("文字列ではありません", &token),
+        };
+    }
+
+    fn define_macro(&mut self) {
+        match self.next().clone() {
+            Token { kind: TokenKind::Ident(name), .. } => match &*name {
+                "include" => self.include(),
+                "define" => match self.next().clone() {
+                    Token { kind: TokenKind::Ident(name), .. } if self.curr().kind == TokenKind::Lparen => self.define_funclike(name),
+                    Token { kind: TokenKind::Ident(name), .. } => self.define_objlike(name),
+                    _ => self.add_error("識別子ではありません", &self.curr().clone()),
+                },
+                _ => self.add_error("\"include\", \"define\" のみ対応しています", &self.curr().clone()),
+            },
             token => self.add_error("識別子ではありません", &token),
         };
     }
 
-    fn preprocess(mut self) -> Result<Vec<Token>, Vec<CompileError>> {
+    fn preprocess(&mut self) -> Result<Vec<Token>, Vec<CompileError>> {
         loop {
             let token = self.next().clone();
             match token.kind {
@@ -195,14 +240,14 @@ impl Preprocessor {
         }
 
         if self.errors.is_empty() {
-            Ok(self.tokens)
+            Ok(self.tokens.clone())
         } else {
-            Err(self.errors)
+            Err(self.errors.clone())
         }
     }
 }
 
 pub fn preprocess(input: Vec<Token>) -> Result<Vec<Token>, Vec<CompileError>> {
-    let preprossor = Preprocessor::new(input);
+    let mut preprossor = Preprocessor::new(input);
     preprossor.preprocess()
 }
