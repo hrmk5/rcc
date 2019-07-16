@@ -343,6 +343,32 @@ impl Generator {
         add_mnemonic!(self, "push rax");
     }
 
+    fn gen_inc_or_dec(&mut self, expr: Expr, is_post: bool, is_inc: bool) {
+        let opcode = if is_inc { "inc" } else { "dec" };
+        let size = expr.ty.clone().unwrap().get_size();
+
+        self.gen_lvalue(expr);
+        add_mnemonic!(self, "pop rax");
+
+        // Load
+        let mov = if size < 4 { "movsx" } else { "mov" };
+        let size_str = self.get_size_str(size).unwrap();
+        let ax = self.get_size_register(if size < 4 { 4 } else { size }, "rbx").unwrap();
+        add_mnemonic!(self, "{} {}, {} [rax]", mov, ax, size_str);
+
+        if is_post {
+            add_mnemonic!(self, "push rbx");
+            add_mnemonic!(self, "{} rbx", opcode);
+        } else {
+            add_mnemonic!(self, "{} rbx", opcode);
+            add_mnemonic!(self, "push rbx");
+        }
+
+        // Save
+        let bx = self.get_size_register(size, "rbx").unwrap();
+        add_mnemonic!(self, "mov [rax], {}", bx);
+    }
+
     fn gen_expr(&mut self, expr: Expr) {
         match expr.kind {
             ExprKind::Literal(Literal::Number(num)) => {
@@ -352,6 +378,8 @@ impl Generator {
                 add_mnemonic!(self, "lea rax, .Ltext{}[rip]", num);
                 add_mnemonic!(self, "push rax");
             },
+            ExprKind::Increment(expr, is_post) => self.gen_inc_or_dec(*expr, is_post, true),
+            ExprKind::Decrement(expr, is_post) => self.gen_inc_or_dec(*expr, is_post, false),
             ExprKind::Variable(_) | ExprKind::Dereference(_) | ExprKind::MemberAccess(_, _) => self.gen_var_or_deref(expr),
             ExprKind::Address(variable) => self.gen_address(variable),
             ExprKind::Assign(lhs, rhs) => self.gen_assign(*lhs, *rhs),

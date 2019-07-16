@@ -456,6 +456,15 @@ impl Parser {
         self.push_start_token();
         let mut expr = self.parse_term();
 
+        let two_tokens = (self.get_token().clone(), self.tokens[self.pos + 1].kind.clone());
+        if let (TokenKind::Add, TokenKind::Add) = two_tokens {
+            self.pos += 2;
+            expr = new_expr_peek!(self, ExprKind::Increment(Box::new(expr), true));
+        } else if let (TokenKind::Sub, TokenKind::Sub) = two_tokens {
+            self.pos += 2;
+            expr = new_expr_peek!(self, ExprKind::Decrement(Box::new(expr), true));
+        }
+
         // 添字演算子
         loop {
             if self.consume(TokenKind::Lbracket) {
@@ -504,9 +513,24 @@ impl Parser {
         new_expr!(self, kind)
     }
 
+    fn parse_increment(&mut self) -> Expr {
+        self.push_prev_token();
+        self.pos += 1;
+        new_expr!(self, ExprKind::Increment(Box::new(self.parse_postfix()), false))
+    }
+
+    fn parse_decrement(&mut self) -> Expr {
+        self.push_prev_token();
+        self.pos += 1;
+        new_expr!(self, ExprKind::Decrement(Box::new(self.parse_postfix()), false))
+    }
+
     fn parse_unary(&mut self) -> Expr {
+        let next_token = self.tokens[self.pos + 1].kind.clone();
         match self.get_token_and_next() {
+            TokenKind::Add if next_token == TokenKind::Add => self.parse_increment(),
             TokenKind::Add => self.parse_postfix(),
+            TokenKind::Sub if next_token == TokenKind::Sub => self.parse_decrement(),
             TokenKind::Sub => self.parse_unary_minus(),
             TokenKind::SizeOf => self.parse_unary_sizeof(),
             TokenKind::Asterisk => self.parse_unary_deref(),

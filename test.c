@@ -83,6 +83,12 @@ int main() {
         a = 5;
     expect("if", 5, a);
 
+    int l = 5;
+    expect("pre-increment", 5, l++);
+    expect("post-increment", 7, ++l);
+    expect("pre-decrement", 7, l--);
+    expect("post-decrement", 5, --l);
+
     expect("less than", 0, 5 < 4);
     expect("less than 2", 0, 5 < 5);
     expect("greater than", 1, 6 > 5);

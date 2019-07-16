@@ -43,6 +43,13 @@ impl Analyzer {
         expr.ty()
     }
 
+    fn is_lvalue(&mut self, expr: &Expr) -> bool {
+        match expr.kind {
+            ExprKind::Variable(_) | ExprKind::Dereference(_) | ExprKind::MemberAccess(_, _) => true,
+            _ => false,
+        }
+    }
+
     fn walk_expr(&mut self, expr: &mut Expr) {
         // sizeofは数値リテラルに置き換える
         if let ExprKind::SizeOf(inner_expr) = &mut expr.kind.clone() {
@@ -107,6 +114,17 @@ impl Analyzer {
                         None
                     },
                 }
+            },
+            ExprKind::Increment(expr, _) => {
+                if !self.is_lvalue(&expr) {
+                    self.add_error("左辺値ではありません", &expr.span);
+                    None
+                } else {
+                    Some(self.get_type(expr))
+                }
+            },
+            ExprKind::Decrement(expr, _) => {
+                Some(self.get_type(expr))
             },
             ExprKind::Invalid => panic!("Unexpected invalid expression"),
             ExprKind::SizeOf(_) => panic!("Unexpected sizeof unary operator"),

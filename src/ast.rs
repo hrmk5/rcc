@@ -138,6 +138,8 @@ pub enum ExprKind {
     BitNot(Box<Expr>),
     SizeOf(Box<Expr>),
     MemberAccess(Box<Expr>, String),
+    Increment(Box<Expr>, bool),
+    Decrement(Box<Expr>, bool),
     Invalid,
 }
 
