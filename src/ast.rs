@@ -71,6 +71,29 @@ impl Type {
             _ => panic!("構造体ではありません"),
         }
     }
+
+    pub fn is_number(&self) -> bool {
+        match self {
+            Type::Array(_, _) | Type::Structure(_, _) | Type::Void => false,
+            _ => true,
+        }
+    }
+
+    pub fn can_assign_to(&self, ty: &Type) -> bool {
+        let lty = ty;
+        let rty = self;
+
+        // TODO: Structure
+        match lty {
+            Type::Void | Type::Array(_, _) | Type::Structure(_, _) => false,
+            Type::Pointer(_) => match rty {
+                Type::Array(_, _) => true,
+                rty => rty.is_number(),
+            },
+            lty if lty.is_number() => rty.is_number(),
+            _ => panic!(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
