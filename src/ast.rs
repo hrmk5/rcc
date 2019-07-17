@@ -218,6 +218,7 @@ pub enum DeclarationKind {
     Func(String, Type, Vec<Variable>, usize, Stmt, bool), // 関数名, 戻り値の型, 引数, スタックのサイズ, 処理, staticかどうか
     GlobalVariable(Variable, Option<Initializer>, bool), // 変数名, 変数, 初期化式, staticかどうか
     Prototype(String, Type, Vec<Type>), // 関数名, 戻り値の型, 引数
+    Extern(Box<Declaration>),
 }
 
 #[derive(Debug)]
@@ -231,13 +232,14 @@ impl Declaration {
     #[allow(dead_code)]
     pub fn get_identifier(&self) -> String {
         match &self.kind {
-            DeclarationKind::Func(name, _, _, _, _, _) => name,
+            DeclarationKind::Func(name, _, _, _, _, _) => name.clone(),
             DeclarationKind::GlobalVariable(var, _, _) => match &var.location {
-                Location::Global(name) => name,
+                Location::Global(name) => name.clone(),
                 _ => panic!(),
             },
-            DeclarationKind::Prototype(name, _, _) => name,
-        }.clone()
+            DeclarationKind::Prototype(name, _, _) => name.clone(),
+            DeclarationKind::Extern(decl) => decl.get_identifier(),
+        }
     }
 }
 

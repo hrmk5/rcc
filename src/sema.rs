@@ -262,6 +262,12 @@ impl Analyzer {
             DeclarationKind::Prototype(name, return_type, args) => {
                 self.functions.insert(name.clone(), Function::new(return_type.clone(), args.clone()));
             },
+            DeclarationKind::Extern(decl) => {
+                match decl.kind {
+                    DeclarationKind::Prototype(_, _, _) | DeclarationKind::GlobalVariable(_, _, _) => self.walk_declaration(decl),
+                    _ => self.add_error("関数と変数にのみextern指定子を付けることができます", &decl.span),
+                }
+            },
         };
     }
 

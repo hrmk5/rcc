@@ -1,6 +1,6 @@
 #include "test.h"
 
-void printf(char *format, int a, int b);
+extern void printf(char *format, int a, int b);
 
 int failed = 0;
 

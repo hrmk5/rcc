@@ -1098,9 +1098,15 @@ impl Parser {
             },
             TokenKind::Extern => {
                 self.pos += 1;
-                self.parse_declaration();
-                None
-            }
+                let decl = self.parse_declaration();
+                match decl {
+                    Some(decl) => Some(DeclarationKind::Extern(Box::new(decl))),
+                    None => {
+                        self.add_error("関数と変数にのみextern指定子を付けることができます");
+                        None
+                    },
+                }
+            },
             _ => if let Some(ty) = self.expect_type(false) {
                 self.parse_var_or_func_decl(ty, is_static)
             } else {
