@@ -193,6 +193,8 @@ int main() {
     expect("global variable with initializer list 2", 32, global_arr2[1][2]);
     expect("global variable with initializer list 3", 16, sizeof(global_arr3));
 
+    expect("external variable", 143, external_var);
+
     char *text;
     text = "hello";
     expect("string literal", 108, text[3]);
