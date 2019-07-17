@@ -1,5 +1,7 @@
 #include "test.h"
 
+void printf(char *format, int a, int b);
+
 int failed = 0;
 
 int plus(int a, int b) {
@@ -172,7 +174,7 @@ int main() {
     expect("call2", 30, plus(5, 4) + plus(5, 16));
     expect("call3", 10, end(arr));
     expect("call4", 45, calc());
-    expect("call5", 0, no_return());
+    no_return();
 
     char ch;
 

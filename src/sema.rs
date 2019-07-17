@@ -3,7 +3,6 @@ use std::mem;
 use crate::ast::*;
 use crate::error::{CompileError, Span};
 
-#[allow(dead_code)]
 struct Function {
     return_type: Type,
     args: Vec<Type>,
@@ -40,7 +39,7 @@ impl Analyzer {
 
     fn get_type(&mut self, expr: &mut Expr) -> Type {
         self.walk_expr(expr);
-        expr.ty()
+        expr.ty.clone().unwrap_or(Type::Void)
     }
 
     fn is_lvalue(&mut self, expr: &Expr) -> bool {
@@ -98,13 +97,42 @@ impl Analyzer {
                 })
             },
             ExprKind::Call(name, args) => {
-                for arg in args {
+                for arg in args.iter_mut() {
                     self.walk_expr(arg);
                 }
+                let args_ = args.clone();
 
-                // TODO: 型チェック
-                // TODO: 関数の存在チェック
-                Some(self.functions.get(name).map_or(Type::Int, |func| func.return_type.clone()))
+                let span = &expr.span;
+                let get_ty = || {
+                    let func = match self.functions.get(name) {
+                        Some(func) => func,
+                        None => {
+                            self.add_error("関数が見つかりません", span);
+                            return None;
+                        },
+                    };
+
+                    // Check argument length
+                    if func.args.len() != args_.len() {
+                        self.add_error("引数の数が違います", span);
+                        return None;
+                    } 
+
+                    // Check arguments
+                    let ok = func.args.iter()
+                        .zip(args_.into_iter().map(|arg| arg.ty))
+                        .all(|a| match a {
+                            (parameter, Some(argument)) => argument.can_assign_to(parameter),
+                            (_, None) => false,
+                        });
+                    if !ok {
+                        self.add_error("不正な引数です", span);
+                        return None;
+                    }
+
+                    Some(func.return_type.clone())
+                };
+                get_ty()
             },
             ExprKind::BitNot(expr) => Some(self.get_type(expr)),
             ExprKind::MemberAccess(expr, name) => {
