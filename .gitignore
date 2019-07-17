@@ -4,5 +4,6 @@
 tmp*
 *.o
 *.s
+/ctest/test
 
 /.vagrant
