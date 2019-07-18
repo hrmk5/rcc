@@ -141,8 +141,8 @@ impl Analyzer {
             ExprKind::MemberAccess(expr, name) => {
                 let ty = self.get_type(expr);
                 match ty {
-                    Type::Structure(members, _) => match members.get(name) {
-                        Some(var) => Some(var.ty.clone()),
+                    Type::Structure(members, _) => match members.iter().find(|(name_, _)| name == name_) {
+                        Some((_, var)) => Some(var.ty.clone()),
                         _ => {
                             self.add_error("メンバが見つかりません", &expr.span);
                             None

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use crate::error::Span;
 
 pub fn align(stack_size: usize, ty: &Type) -> usize {
@@ -20,12 +19,12 @@ pub enum Type {
     Void,
     Pointer(Box<Type>),
     Array(Box<Type>, usize),
-    Structure(HashMap<String, Variable>, usize),
+    Structure(Vec<(String, Variable)>, usize),
 }
 
 impl Type {
     pub fn new_structure(member_types: Vec<(String, Type)>) -> Self {
-        let mut members = HashMap::new();
+        let mut members = Vec::new();
         let mut size = 0;
 
         for (name, ty) in member_types {
@@ -33,7 +32,7 @@ impl Type {
             size += member_size;
             size = align(size, &ty);
 
-            members.insert(name, Variable::new(ty, Location::Local(size)));
+            members.push((name, Variable::new(ty, Location::Local(size))));
         }
 
         Type::Structure(members, size)
@@ -64,8 +63,8 @@ impl Type {
 
     pub fn find_member(&self, name: &str) -> &Variable {
         match self {
-            Type::Structure(members, _) => match members.get(name) {
-                Some(var) => var,
+            Type::Structure(members, _) => match members.iter().find(|(name_, _)| name == name_) {
+                Some((_, var)) => var,
                 _ => panic!("メンバが見つかりません"),
             },
             _ => panic!("構造体ではありません"),
