@@ -577,18 +577,16 @@ impl Generator {
 
     fn gen_initalizer(&mut self, offset: usize, ty: &Type, initializer: Initializer) {
         match initializer.kind {
-            InitializerKind::List(initializers) => {
-                let element_type = match ty {
-                    Type::Array(ty, _) => ty,
-                    _ => panic!(),
-                };
-
-                let mut i = 0;
-                for initializer in initializers {
-                    let element_offset = offset - i * element_type.get_size();
-                    self.gen_initalizer(element_offset, &element_type, initializer);
-                    i += 1;
-                }
+            InitializerKind::List(initializers) => match ty {
+                Type::Array(element_type, _) => {
+                    let mut i = 0;
+                    for initializer in initializers {
+                        let element_offset = offset - i * element_type.get_size();
+                        self.gen_initalizer(element_offset, &element_type, initializer);
+                        i += 1;
+                    }
+                },
+                _ => panic!(),
             },
             InitializerKind::Expr(expr) => {
                 self.gen_expr(expr);

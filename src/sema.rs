@@ -67,7 +67,10 @@ impl Analyzer {
             ExprKind::Variable(var) => Some(var.ty.clone()),
             ExprKind::Dereference(expr) => match self.get_type(expr) {
                 Type::Pointer(box ty) | Type::Array(box ty, _) => Some(ty),
-                _ => panic!("ポインタではない式を参照外ししています"),
+                _ => {
+                    self.add_error("ポインタではない式を参照外ししています", &expr.span);
+                    None
+                },
             },
             ExprKind::Address(var) => Some(Type::Pointer(Box::new(var.ty.clone()))),
             ExprKind::Assign(lhs, rhs) => {
@@ -207,7 +210,15 @@ impl Analyzer {
                     Type::Array(box Type::Void, _) => self.add_error("void型の配列は定義できません", &stmt.span),
                     _ => {
                         if let Some(initializer) = initializer {
-                            self.walk_initializer(initializer);
+                            if let InitializerKind::List(_) = initializer.kind {
+                                if let Type::Array(_, _) | Type::Structure(_, _) = var.ty {
+                                    self.walk_initializer(initializer);
+                                } else {
+                                    self.add_error("配列と構造体以外の変数に初期化リストを使用しています", &initializer.span);
+                                }
+                            } else {
+                                self.walk_initializer(initializer);
+                            }
                         }
                     },
                 };
