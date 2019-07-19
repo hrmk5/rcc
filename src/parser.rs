@@ -380,6 +380,11 @@ impl Parser {
         
         if !self.consume(TokenKind::Rparen) {
             loop {
+                if self.consume(TokenKind::Rparen) {
+                    self.add_error_token("末尾のカンマです", self.pos - 2);
+                    break;
+                }
+
                 args.push(self.parse_expr());
                 if self.consume(TokenKind::Rparen) {
                     break;
@@ -695,6 +700,11 @@ impl Parser {
             } else {
                 let mut initializers = Vec::new();
                 loop {
+                    if self.consume(TokenKind::Rbrace) {
+                        self.add_error_token("末尾のカンマです", self.pos - 2);
+                        break;
+                    }
+
                     initializers.push(self.parse_initializer());
 
                     if self.consume(TokenKind::Rbrace) {
