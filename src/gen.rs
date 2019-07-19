@@ -680,22 +680,58 @@ impl Generator {
 
     fn gen_global_initializer(&mut self, ty: &Type, initializer: Initializer) {
         match initializer.kind {
-            InitializerKind::List(initializers) => {
-                let (element_type, size) = match ty {
-                    Type::Array(ty, size) => (ty, size),
-                    _ => panic!(),
-                };
+            InitializerKind::List(initializers) => match ty {
+                Type::Array(element_type, size) => {
+                    let mut i = 0;
+                    for initializer in initializers {
+                        self.gen_global_initializer(&element_type, initializer);
+                        i += 1;
+                    }
 
-                let mut i = 0;
-                for initializer in initializers {
-                    self.gen_global_initializer(&element_type, initializer);
-                    i += 1;
-                }
+                    let padding = (size - i) * element_type.get_size();
+                    if padding > 0 {
+                        add_mnemonic!(self, ".zero {}", padding);
+                    }
+                },
+                Type::Structure(members, _) => {
+                    let mut size = 0;
 
-                let padding = (size - i) * element_type.get_size();
-                if padding > 0 {
-                    add_mnemonic!(self, ".zero {}", padding);
+                    let mut get_padding = |ty: &Type| -> usize {
+                        size += ty.get_size();
+                        let align = ty.align();
+                        let padding = align - size % align;
+                        if padding != align {
+                            size += padding;
+                            padding
+                        } else {
+                            0
+                        }
+                    };
+
+                    let mut i = 0;
+                    for initializer in initializers {
+                        let member_ty = &members[i].1.ty;
+
+                        let padding = get_padding(member_ty);
+                        if padding > 0 {
+                            add_mnemonic!(self, ".zero {}", padding);
+                        }
+
+                        self.gen_global_initializer(member_ty, initializer);
+
+                        i += 1;
+                    }
+
+                    for (_, member) in members.iter().skip(i) {
+                        let padding = get_padding(&member.ty);
+                        if padding > 0 {
+                            add_mnemonic!(self, ".zero {}", padding);
+                        }
+
+                        add_mnemonic!(self, ".zero {}", member.ty.get_size());
+                    }
                 }
+                _ => panic!(),
             },
             InitializerKind::Expr(expr) => {
                 self.gen_global_init_expr(ty, expr);

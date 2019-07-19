@@ -36,6 +36,7 @@ struct Foo {
     int c;
 };
 struct Foo foo1;
+struct Foo global_foo = { 99, 88 };
 
 typedef struct {
     int a;
@@ -211,6 +212,7 @@ int main() {
     expect("initializer list 2", 26, arr4[4] + sizeof(arr4));
     struct Foo foo4 = { 3, 7, 235 };
     expect("initializer list 3", 245, foo4.a + foo4.b + foo4.c);
+    expect("initializer list 4", 187, global_foo.a + global_foo.b + global_foo.c);
 
     expect("objlike macro", 10, MACRO);
     MACRO2;
