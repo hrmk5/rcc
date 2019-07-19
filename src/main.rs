@@ -31,7 +31,7 @@ fn print_error(lines: &Vec<&str>, errors: &Vec<CompileError>) {
     for error in errors {
         let line = (error.span.start_line + 1).to_string();
         println!("{} {}", format!("{} |", line).bright_cyan(), lines[error.span.start_line]);
-        println!("{}{} {}", " ".repeat(error.span.start_col + line.chars().count() + 2).bright_red(), "^".repeat(error.span.end_col - error.span.start_col).bright_red(), error.msg.bright_red());
+        println!("{}{} {}", " ".repeat(error.span.start_col + line.chars().count() + 3).bright_red(), "^".repeat(error.span.end_col - error.span.start_col).bright_red(), error.msg.bright_red());
     }
 }
 

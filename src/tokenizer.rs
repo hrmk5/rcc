@@ -128,7 +128,7 @@ impl Tokenizer {
         self.next();
 
         let start_pos = self.pos;
-        let start_col = self.col;
+        let start_col = self.col - 1;
         loop {
             match self.ch {
                 '"' => {
@@ -227,9 +227,9 @@ impl Tokenizer {
                 '.' => self.add_token_and_skip(TokenKind::Dot, 1),
                 ':' => self.add_token_and_skip(TokenKind::Colon, 1),
                 '\n' => {
+                    self.add_token_and_skip(TokenKind::NewLine, 1);
                     self.line += 1;
                     self.col = 0;
-                    self.add_token_and_skip(TokenKind::NewLine, 1);
                 },
                 '\0' => break,
                 _ => { self.add_error("Unexpected token"); self.next() },
