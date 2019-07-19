@@ -582,6 +582,14 @@ impl Generator {
                         i += 1;
                     }
                 },
+                Type::Structure(members, _) => {
+                    let mut i = 0;
+                    for initializer in initializers {
+                        let member_offset = offset - members[i].1.offset();
+                        self.gen_initalizer(member_offset, &members[i].1.ty, initializer);
+                        i += 1;
+                    }
+                },
                 _ => panic!(),
             },
             InitializerKind::Expr(expr) => {

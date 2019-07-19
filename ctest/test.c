@@ -207,6 +207,8 @@ int main() {
     expect("initializer list", 9, arr2[2]);
     int arr4[] = { 3, 9, 13, 51, 6 };
     expect("initializer list 2", 26, arr4[4] + sizeof(arr4));
+    struct Foo foo4 = { 3, 7, 235 };
+    expect("initializer list 3", 245, foo4.a + foo4.b + foo4.c);
 
     expect("objlike macro", 10, MACRO);
     MACRO2;
