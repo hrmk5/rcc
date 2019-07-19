@@ -28,11 +28,11 @@ impl Type {
         let mut size = 0;
 
         for (name, ty) in member_types {
+            members.push((name, Variable::new(ty.clone(), Location::Local(size))));
+
             let member_size = ty.get_size();
             size += member_size;
             size = align(size, &ty);
-
-            members.push((name, Variable::new(ty, Location::Local(size))));
         }
 
         Type::Structure(members, size)

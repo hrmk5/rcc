@@ -159,15 +159,11 @@ impl Generator {
             ExprKind::MemberAccess(lhs, member) => {
                 // メンバを取得
                 let ty = lhs.ty();
-                let size = match ty {
-                    Type::Structure(_, size) => size,
-                    _ => panic!(),
-                };
                 let member = ty.find_member(&member);
 
                 self.gen_lvalue(*lhs);
                 add_mnemonic!(self, "pop rax");
-                add_mnemonic!(self, "lea rax, [rax+{}]", size - member.offset());
+                add_mnemonic!(self, "lea rax, [rax+{}]", member.offset());
                 add_mnemonic!(self, "push rax");
 
                 // 変数のサイズを返す
