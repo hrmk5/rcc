@@ -493,7 +493,7 @@ impl Generator {
 
         // 初期化式
         if let Some(initializer) = initializer {
-            self.gen_initalizer(offset, &variable.ty, initializer);
+            self.gen_initializer(offset, &variable.ty, initializer);
         }
     }
 
@@ -571,14 +571,14 @@ impl Generator {
         }
     }
 
-    fn gen_initalizer(&mut self, offset: usize, ty: &Type, initializer: Initializer) {
+    fn gen_initializer(&mut self, offset: usize, ty: &Type, initializer: Initializer) {
         match initializer.kind {
             InitializerKind::List(initializers) => match ty {
                 Type::Array(element_type, _) => {
                     let mut i = 0;
                     for initializer in initializers {
                         let element_offset = offset - i * element_type.get_size();
-                        self.gen_initalizer(element_offset, &element_type, initializer);
+                        self.gen_initializer(element_offset, &element_type, initializer);
                         i += 1;
                     }
                 },
@@ -586,7 +586,7 @@ impl Generator {
                     let mut i = 0;
                     for initializer in initializers {
                         let member_offset = offset - members[i].1.offset();
-                        self.gen_initalizer(member_offset, &members[i].1.ty, initializer);
+                        self.gen_initializer(member_offset, &members[i].1.ty, initializer);
                         i += 1;
                     }
                 },
