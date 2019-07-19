@@ -1117,6 +1117,7 @@ impl Parser {
                 self.parse_var_or_func_decl(ty, is_static)
             } else {
                 self.add_error("型ではありません");
+                self.pos += 1;
                 None
             },
         };
