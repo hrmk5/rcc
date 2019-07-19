@@ -364,6 +364,12 @@ impl Parser {
     }
 
     fn parse_string(&mut self, s: String) -> ExprKind {
+        let mut s = s;
+        while let TokenKind::String(new_s) = self.get_token() {
+            s += new_s;
+            self.pos += 1;
+        }
+
         self.string_list.push(s);
         ExprKind::Literal(Literal::String(self.string_list.len() - 1))
     }

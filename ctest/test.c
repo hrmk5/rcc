@@ -198,6 +198,8 @@ int main() {
     char *text;
     text = "hello";
     expect("string literal", 108, text[3]);
+    text = "lorem " "ipsum";
+    expect("string lireral concatenation", 117, text[9]);
 
     int e = 13;
     expect("initialization expression", 13, e);
