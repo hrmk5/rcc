@@ -16,6 +16,7 @@ pub enum Type {
     Char,
     Short,
     Long,
+    Float,
     Void,
     Pointer(Box<Type>),
     Array(Box<Type>, usize),
@@ -48,6 +49,7 @@ impl Type {
             Type::Char => 1,
             Type::Short => 2,
             Type::Long => 8,
+            Type::Float => 4,
             Type::Void => 8,
             Type::Pointer(_) => 8,
             Type::Array(ty, size) => ty.get_size() * size,
@@ -151,6 +153,7 @@ pub enum Infix {
 #[derive(Debug, Clone)]
 pub enum Literal {
     Number(i32),
+    Float(usize),
     String(usize),
 }
 
@@ -254,4 +257,5 @@ pub struct Program {
     pub declarations: Vec<Declaration>,
     pub global_variables: Vec<Variable>,
     pub string_list: Vec<String>,
+    pub float_list: Vec<f32>,
 }

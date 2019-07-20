@@ -143,6 +143,7 @@ impl Tokenizer {
             "continue" => TokenKind::Continue,
             "default" => TokenKind::Default,
             "const" => TokenKind::Const,
+            "float" => TokenKind::Float,
             _ => TokenKind::Ident(s),
         }, start_col, self.col);
     }

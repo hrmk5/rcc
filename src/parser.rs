@@ -20,6 +20,7 @@ pub struct Parser {
     enums: HashMap<String, i64>,
 
     string_list: Vec<String>,
+    float_list: Vec<f32>,
     tokens: Vec<Token>,
     pos: usize,
     stack_size: usize,
@@ -104,6 +105,7 @@ impl Parser {
             typedefs: HashMap::new(),
             enums: HashMap::new(),
             string_list: Vec::new(),
+            float_list: Vec::new(),
             stack_size: 0,
             start_token_stack: Vec::new(),
             cases: Vec::new(),
@@ -349,6 +351,7 @@ impl Parser {
             TokenKind::Char => Type::Char,
             TokenKind::Short => Type::Short,
             TokenKind::Long => Type::Long,
+            TokenKind::Float => Type::Float,
             TokenKind::Void => Type::Void,
             TokenKind::Struct => match self.parse_type_struct(is_global) {
                 Some(ty) => ty,
@@ -389,6 +392,11 @@ impl Parser {
 
         self.string_list.push(s);
         ExprKind::Literal(Literal::String(self.string_list.len() - 1))
+    }
+
+    fn parse_float(&mut self, num: f64) -> ExprKind {
+        self.float_list.push(num as f32);
+        ExprKind::Literal(Literal::Float(self.float_list.len() - 1))
     }
 
     fn parse_call(&mut self, ident: String) -> ExprKind {
@@ -463,6 +471,7 @@ impl Parser {
                 expr
             },
             TokenKind::Number(num) => new_expr!(self, ExprKind::Literal(Literal::Number(num))),
+            TokenKind::FloatNum(num) => new_expr!(self, self.parse_float(num)),
             TokenKind::String(s) => new_expr!(self, self.parse_string(s)),
             TokenKind::Ident(ident) => new_expr!(self, self.parse_var_or_call(ident)),
             _ => new_expr!(self, self.invalid_expr("数値でも開きカッコでもないトークンです", 0)),
@@ -1177,6 +1186,7 @@ impl Parser {
                 declarations,
                 global_variables: self.global_variables.clone().into_iter().map(|(_, v)| v).collect(),
                 string_list: self.string_list.clone(),
+                float_list: self.float_list,
             })
         } else {
             Err(self.errors)
