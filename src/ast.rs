@@ -20,6 +20,7 @@ pub enum Type {
     Pointer(Box<Type>),
     Array(Box<Type>, usize),
     Structure(Vec<(String, Variable)>, usize),
+    Const(Box<Type>),
 }
 
 impl Type {
@@ -51,6 +52,7 @@ impl Type {
             Type::Pointer(_) => 8,
             Type::Array(ty, size) => ty.get_size() * size,
             Type::Structure(_, size) => *size,
+            Type::Const(ty) => ty.get_size(),
         }
     }
 
@@ -59,7 +61,7 @@ impl Type {
             Type::Structure(members, _) => members.iter()
                 .max_by_key(|(_, var)| var.ty.align())
                 .map_or(0, |(_, var)| var.ty.align()),
-            Type::Array(ty, _) => ty.align(),
+            Type::Array(ty, _) | Type::Const(ty) => ty.align(),
             ty => ty.get_size(),
         }
     }
@@ -77,6 +79,7 @@ impl Type {
     pub fn is_number(&self) -> bool {
         match self {
             Type::Array(_, _) | Type::Structure(_, _) | Type::Void => false,
+            Type::Const(ty) => ty.is_number(),
             _ => true,
         }
     }
@@ -92,6 +95,7 @@ impl Type {
                 Type::Array(_, _) => true,
                 rty => rty.is_number(),
             },
+            Type::Const(lty) => rty.can_assign_to(lty),
             lty if lty.is_number() => rty.is_number(),
             _ => panic!(),
         }

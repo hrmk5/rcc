@@ -665,7 +665,7 @@ impl Generator {
     }
 
     fn gen_global_init_expr(&mut self, ty: &Type, init_expr: Expr) {
-        match (ty.clone(), init_expr.kind) {
+        match (ty.clone(), init_expr.kind.clone()) {
             (Type::Int, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".int {}", num),
             (Type::Char, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".byte {}", num),
             (Type::Short, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".value {}", num),
@@ -673,7 +673,9 @@ impl Generator {
             (Type::Pointer(_), ExprKind::Address(variable)) => add_mnemonic!(self, ".quad {}", global!(variable)),
             // TODO: ポインタ演算
             (Type::Array(box Type::Char, _), ExprKind::Literal(Literal::String(num))) |
-            (Type::Pointer(box Type::Char), ExprKind::Literal(Literal::String(num))) => add_mnemonic!(self, ".quad .Ltext{}", num),
+            (Type::Pointer(box Type::Char), ExprKind::Literal(Literal::String(num))) |
+            (Type::Pointer(box Type::Const(box Type::Char)), ExprKind::Literal(Literal::String(num))) => add_mnemonic!(self, ".quad .Ltext{}", num),
+            (Type::Const(ty), _) => self.gen_global_init_expr(&ty, init_expr),
             _ => panic!("サポートしていない初期化式です"),
         };
     }

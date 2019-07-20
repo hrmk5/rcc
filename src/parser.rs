@@ -231,7 +231,7 @@ impl Parser {
     }
 
     fn expect_define(&mut self, array_as_pointer: bool, allow_ident_omit: bool) -> Option<Variable> {
-        let ty = self.expect_type(false)?;
+        let ty = self.expect_type(false, true)?;
         let ident = self.expect_ident();
         match ident {
             Some(ident) => {
@@ -295,7 +295,7 @@ impl Parser {
                     break;
                 }
 
-                if let Some(ty) = self.expect_type(is_global) {
+                if let Some(ty) = self.expect_type(is_global, true) {
                     if let Some(ident) = self.expect_ident() {
                         members.push((ident, ty));
                     } else {
@@ -343,7 +343,7 @@ impl Parser {
         }
     }
 
-    fn expect_type(&mut self, is_global: bool) -> Option<Type> {
+    fn expect_type(&mut self, is_global: bool, parse_pointer: bool) -> Option<Type> {
         let ty = match self.tokens[self.pos].kind {
             TokenKind::Int => Type::Int,
             TokenKind::Char => Type::Char,
@@ -354,13 +354,30 @@ impl Parser {
                 Some(ty) => ty,
                 None => return None,
             },
+            TokenKind::Const => {
+                self.pos += 1;
+                match self.expect_type(is_global, false) {
+                    Some(ty) => {
+                        self.pos -= 1;
+                        Type::Const(Box::new(ty))
+                    },
+                    None => {
+                        self.add_error("型ではありません");
+                        return None;
+                    },
+                }
+            },
             TokenKind::Ident(ref name) => self.find_typedef(name)?.clone(),
             _ => return None,
         };
 
         self.pos += 1;
 
-        Some(self.parse_pointer(ty))
+        if parse_pointer {
+            Some(self.parse_pointer(ty))
+        } else {
+            Some(ty)
+        }
     }
 
     fn parse_string(&mut self, s: String) -> ExprKind {
@@ -816,7 +833,7 @@ impl Parser {
     }
 
     fn expect_define_stmt(&mut self) -> Option<StmtKind> {
-        let ty = self.expect_type(false)?;
+        let ty = self.expect_type(false, true)?;
         let ident = self.expect_ident().or_else(|| { self.add_error("識別子ではありません"); None })?;
 
         // 添字演算子があったら配列型にする
@@ -864,7 +881,7 @@ impl Parser {
     }
 
     fn parse_typedef(&mut self, is_global: bool) {
-        let ty = match self.expect_type(is_global) {
+        let ty = match self.expect_type(is_global, true) {
             Some(ty) => ty,
             None => {
                 self.add_error("型ではありません");
@@ -1123,7 +1140,7 @@ impl Parser {
                     },
                 }
             },
-            _ => if let Some(ty) = self.expect_type(false) {
+            _ => if let Some(ty) = self.expect_type(false, true) {
                 self.parse_var_or_func_decl(ty, is_static)
             } else {
                 self.add_error("型ではありません");

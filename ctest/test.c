@@ -1,6 +1,6 @@
 #include "ctest/test.h"
 
-extern void printf(char *format, int a, int b);
+extern void printf(const char *format, int a, int b);
 
 int failed = 0;
 
@@ -29,6 +29,8 @@ int global_arr2[3][3] = {
     { 9, 10, 32 }
 };
 int global_arr3[] = { 40, 23, 31, 3 };
+
+const char *const_value_in_global = "Constant value";
 
 struct Foo {
     char a;
@@ -79,6 +81,11 @@ int main() {
     expect("variable", 5, a);
     a = a * 4;
     expect("variable2", 20, a);
+
+    const int const_value = 37;
+    expect("const variable", 37, const_value);
+    expect("const variable in global", 67, const_value_in_global[0]);
+
     if (0)
         a = 3;
     expect("if", 20, a);

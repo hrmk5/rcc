@@ -74,10 +74,12 @@ impl Analyzer {
             },
             ExprKind::Address(var) => Some(Type::Pointer(Box::new(var.ty.clone()))),
             ExprKind::Assign(lhs, rhs) => {
-                let lty = self.get_type(rhs);
-                let rty = self.get_type(lhs);
+                let lty = self.get_type(lhs);
+                let rty = self.get_type(rhs);
                 
-                if let (Type::Structure(_, _), Type::Structure(_, _)) = (&lty, &rty) {
+                if let Type::Const(_) = &lty {
+                    self.add_error("const変数に代入できません", &rhs.span);
+                } else if let (Type::Structure(_, _), Type::Structure(_, _)) = (&lty, &rty) {
                     self.add_error("構造体に構造体は代入できません", &rhs.span);
                 } else if !rty.can_assign_to(&lty) {
                     self.add_error("互換性のない型です", &rhs.span);

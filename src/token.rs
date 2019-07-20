@@ -56,6 +56,7 @@ pub enum TokenKind {
     Extern,
     Continue,
     Default,
+    Const,
 }
 
 impl ToString for TokenKind {
@@ -117,6 +118,7 @@ impl ToString for TokenKind {
             TokenKind::Extern => "extern",
             TokenKind::Continue => "continue",
             TokenKind::Default => "default",
+            TokenKind::Const => "const",
         })
     }
 }
