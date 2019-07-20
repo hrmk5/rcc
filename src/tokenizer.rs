@@ -227,6 +227,12 @@ impl Tokenizer {
                 '#' => self.add_token_and_skip(TokenKind::Hash, 1),
                 '.' => self.add_token_and_skip(TokenKind::Dot, 1),
                 ':' => self.add_token_and_skip(TokenKind::Colon, 1),
+                '\\' if self.next_is('\n') => {
+                    self.next();
+                    self.next();
+                    self.line += 1;
+                    self.col = 0;
+                },
                 '\n' => {
                     self.add_token_and_skip(TokenKind::NewLine, 1);
                     self.line += 1;
