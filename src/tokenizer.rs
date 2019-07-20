@@ -85,6 +85,29 @@ impl Tokenizer {
         self.add_token(TokenKind::Number(num as i32), start_col, self.col);
     }
 
+    fn tokenize_decimal(&mut self) {
+        let start_col = self.col;
+        let mut num: i64 = 0;
+        let mut decimal_point_pos: Option<u32> = None;
+        while self.ch.is_digit(10) || self.ch == '.' {
+            if self.ch == '.' {
+                decimal_point_pos = Some((self.col - start_col) as u32);
+            } else {
+                let digit = self.ch.to_digit(10).unwrap() as u8;
+                num = (10 * num) + digit as i64;
+            }
+
+            self.next();
+        }
+
+        if let Some(pos) = decimal_point_pos {
+            let pos = (self.col - start_col) as u32 - pos;
+            self.add_token(TokenKind::FloatNum(num as f64 / 10u32.pow(pos - 1) as f64), start_col, self.col);
+        } else {
+            self.add_token(TokenKind::Number(num as i32), start_col, self.col);
+        }
+    }
+
     fn tokenize_ident(&mut self) {
         let start_pos = self.pos;
         let start_col = self.col;
@@ -187,12 +210,13 @@ impl Tokenizer {
                     self.next();
                     self.tokenize_number(16)
                 },
+                '0' if self.next_is('.') => self.tokenize_decimal(),
                 '0' => {
                     // "0" を消費
                     self.next();
                     self.tokenize_number(8);
                 },
-                c if c.is_digit(10) => self.tokenize_number(10),
+                c if c.is_digit(10) => self.tokenize_decimal(),
                 c if c.is_ascii_alphanumeric() || c == '_' => self.tokenize_ident(),
                 '+' => self.add_token_and_skip(TokenKind::Add, 1),
                 '-' if self.next_is('>') => self.add_token_and_skip(TokenKind::Arrow, 2),
@@ -225,7 +249,10 @@ impl Tokenizer {
                 '~' => self.add_token_and_skip(TokenKind::BitNot, 1),
                 '%' => self.add_token_and_skip(TokenKind::Mod, 1),
                 '#' => self.add_token_and_skip(TokenKind::Hash, 1),
-                '.' => self.add_token_and_skip(TokenKind::Dot, 1),
+                '.' => match self.input.get(self.pos + 1) {
+                    Some(ch) if ch.is_digit(10) => self.tokenize_decimal(),
+                    _ => self.add_token_and_skip(TokenKind::Dot, 1),
+                },
                 ':' => self.add_token_and_skip(TokenKind::Colon, 1),
                 '\\' if self.next_is('\n') => {
                     self.next();

@@ -57,6 +57,7 @@ pub enum TokenKind {
     Continue,
     Default,
     Const,
+    FloatNum(f64),
 }
 
 impl ToString for TokenKind {
@@ -119,6 +120,7 @@ impl ToString for TokenKind {
             TokenKind::Continue => "continue",
             TokenKind::Default => "default",
             TokenKind::Const => "const",
+            TokenKind::FloatNum(_) => "float",
         })
     }
 }
