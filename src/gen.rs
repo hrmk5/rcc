@@ -8,9 +8,11 @@ pub struct Generator {
     break_label_stack: Vec<u32>,
     continue_label_stack: Vec<u32>,
     default_label: Vec<u32>,
+    stack_size: usize,
 }
 
-const ARG_REGISTERS: [&str; 6] = ["r9", "r8", "rcx", "rdx", "rsi", "rdi"];
+const ARG_REGISTERS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+const XMM_ARG_REGISTERS: [&str; 6] = ["xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5"];
 
 macro_rules! add_mnemonic {
     ($self: ident, $s: tt) => {
@@ -49,6 +51,7 @@ impl Generator {
             break_label_stack: Vec::new(),
             continue_label_stack: Vec::new(),
             default_label: Vec::new(),
+            stack_size: 0,
         }
     }
 
@@ -102,14 +105,26 @@ impl Generator {
         }
     }
 
-    fn push_xmm(&mut self, num: u8) {
-        add_mnemonic!(self, "sub rsp, 4");
-        add_mnemonic!(self, "movss [rsp], xmm{}", num);
+    fn push(&mut self, reg: &'static str) {
+        add_mnemonic!(self, "push {}", reg);
+        self.stack_size += 8;
     }
 
-    fn pop_xmm(&mut self, num: u8) {
-        add_mnemonic!(self, "movss xmm{}, [rsp]", num);
+    fn pop(&mut self, reg: &'static str) {
+        add_mnemonic!(self, "pop {}", reg);
+        self.stack_size -= 8;
+    }
+
+    fn push_xmm(&mut self, reg: &'static str) {
+        add_mnemonic!(self, "sub rsp, 4");
+        add_mnemonic!(self, "movss [rsp], {}", reg);
+        self.stack_size += 4;
+    }
+
+    fn pop_xmm(&mut self, reg: &'static str) {
+        add_mnemonic!(self, "movss {}, [rsp]", reg);
         add_mnemonic!(self, "add rsp, 4");
+        self.stack_size -= 4;
     }
 
     fn gen_dereference(&mut self, expr: Expr) {
@@ -128,7 +143,7 @@ impl Generator {
             },
             _ => {
                 self.gen_expr(expr);
-                add_mnemonic!(self, "pop rax");
+                self.pop("rax");
             },
         }
     }
@@ -138,7 +153,7 @@ impl Generator {
             ExprKind::Dereference(expr) => {
                 let ty = expr.ty();
                 self.gen_dereference(*expr);
-                add_mnemonic!(self, "push rax");
+                self.push("rax");
                 Some(match ty {
                     Type::Pointer(box Type::Array(_, _)) => 8,
                     Type::Pointer(ty) => ty.get_size(),
@@ -151,11 +166,11 @@ impl Generator {
                     Location::Local(offset) => {
                         add_mnemonic!(self, "mov rax, rbp");
                         add_mnemonic!(self, "sub rax, {}", offset);
-                        add_mnemonic!(self, "push rax");
+                        self.push("rax");
                     },
                     Location::Global(name) => {
                         add_mnemonic!(self, "lea rax, {}[rip]", &name);
-                        add_mnemonic!(self, "push rax");
+                        self.push("rax");
                     },
                 };
 
@@ -172,9 +187,9 @@ impl Generator {
                 let member = ty.find_member(&member);
 
                 self.gen_lvalue(*lhs);
-                add_mnemonic!(self, "pop rax");
+                self.pop("rax");
                 add_mnemonic!(self, "lea rax, [rax+{}]", member.offset());
-                add_mnemonic!(self, "push rax");
+                self.push("rax");
 
                 // 変数のサイズを返す
                 // 配列の場合はポインタのサイズを返す
@@ -235,14 +250,14 @@ impl Generator {
         let ty = expr.ty();
 
         self.gen_lvalue(expr);
-        add_mnemonic!(self, "pop rax");
+        self.pop("rax");
 
         if let Type::Float = &ty {
             self.gen_load("xmm0", "rax", &ty);
-            self.push_xmm(0);
+            self.push_xmm("xmm0");
         } else {
             self.gen_load("rax", "rax", &ty);
-            add_mnemonic!(self, "push rax");
+            self.push("rax");
         }
     }
 
@@ -251,11 +266,11 @@ impl Generator {
             Location::Local(offset) => {
                 add_mnemonic!(self, "mov rax, rbp");
                 add_mnemonic!(self, "sub rax, {}", offset);
-                add_mnemonic!(self, "push rax");
+                self.push("rax");
             },
             Location::Global(name) => {
                 add_mnemonic!(self, "lea rax, {}[rip]", &name);
-                add_mnemonic!(self, "push rax");
+                self.push("rax");
             },
         };
     }
@@ -267,20 +282,20 @@ impl Generator {
         self.gen_expr(rhs);
 
         let register = if let Type::Float = rty {
-            self.pop_xmm(0);
+            self.pop_xmm("xmm0");
             "xmm0"
         } else {
-            add_mnemonic!(self, "pop rdx");
+            self.pop("rdx");
             "rdx"
         };
 
-        add_mnemonic!(self, "pop rax");
+        self.pop("rax");
         self.gen_save("rax", register, &rty);
 
         if let Type::Float = rty {
-            self.push_xmm(0);
+            self.push_xmm("xmm0");
         } else {
-            add_mnemonic!(self, "push rdx");
+            self.push("rdx");
         }
     }
 
@@ -291,18 +306,18 @@ impl Generator {
                     self.gen_expr(lhs);
                     self.gen_expr(rhs);
                     // rhsにポインタか配列の型のサイズを掛ける
-                    add_mnemonic!(self, "pop rdi");
+                    self.pop("rdi");
                     add_mnemonic!(self, "mov rax, {}", ty.get_size());
                     add_mnemonic!(self, "imul rdi");
-                    add_mnemonic!(self, "push rax");
+                    self.push("rax");
                 },
                 (Type::Int, Type::Pointer(ty)) | (Type::Int, Type::Array(ty, _)) => {
                     self.gen_expr(lhs);
                     // lhsにポインタか配列の型のサイズを掛ける
-                    add_mnemonic!(self, "pop rdi");
+                    self.pop("rdi");
                     add_mnemonic!(self, "mov rax, {}", ty.get_size());
                     add_mnemonic!(self, "imul rdi");
-                    add_mnemonic!(self, "push rax");
+                    self.push("rax");
 
                     self.gen_expr(rhs);
                 },
@@ -317,8 +332,8 @@ impl Generator {
             },
         };
 
-        add_mnemonic!(self, "pop rdi");
-        add_mnemonic!(self, "pop rax");
+        self.pop("rdi");
+        self.pop("rax");
 
         match kind {
             Infix::Add => add_mnemonic!(self, "add rax, rdi"),
@@ -366,31 +381,61 @@ impl Generator {
             },
         };
 
-        add_mnemonic!(self, "push rax");
+        self.push("rax");
     }
 
     fn gen_call(&mut self, name: String, args: Vec<Expr>) {
-        let arg_count = args.len();
-        for arg_expr in args {
+        let mut regs: Vec<(&'static str, Type)> = Vec::new();
+        let mut arg_reg = 0;
+        let mut xmm_arg_reg = 0;
+        for arg_expr in args.clone() {
+            let ty = arg_expr.ty();
+            match &ty {
+                Type::Float => {
+                    regs.push((XMM_ARG_REGISTERS[xmm_arg_reg], ty));
+                    xmm_arg_reg += 1;
+                },
+                _ => {
+                    regs.push((ARG_REGISTERS[arg_reg], ty));
+                    arg_reg += 1;
+                },
+            };
+
             self.gen_expr(arg_expr);
         }
 
-        for register in ARG_REGISTERS[6 - arg_count..].iter() {
-            add_mnemonic!(self, "pop {}", register);
+        for (reg, ty) in regs.into_iter().rev() {
+            match &ty {
+                Type::Float => {
+                    add_mnemonic!(self, "cvtss2sd {}, [rsp]", reg);
+                    add_mnemonic!(self, "add rsp, 4");
+                    self.stack_size -= 4;
+                },
+                _ => self.pop(reg),
+            }
         }
-        // 浮動小数点の引数の数
-        add_mnemonic!(self, "mov al, 0");
-        // TODO: RSP を調整する
-        // 調整してないけど動く
-        add_mnemonic!(self, "call {}", name);
-        add_mnemonic!(self, "push rax");
+
+        add_mnemonic!(self, "mov al, {}", xmm_arg_reg);
+
+        // Align stack
+        let padding = 16 - (self.stack_size - 8) % 16;
+        if padding == 16 {
+            add_mnemonic!(self, "call {}", name);
+        } else {
+            add_mnemonic!(self, "sub rsp, {}", padding);
+            add_mnemonic!(self, "call {}", name);
+            // Revert stack
+            add_mnemonic!(self, "add rsp, {}", padding);
+        }
+
+        self.push("rax");
     }
 
     fn gen_bit_not(&mut self, expr: Expr) {
         self.gen_expr(expr);
-        add_mnemonic!(self, "pop rax");
+        self.pop("rax");
         add_mnemonic!(self, "not rax");
-        add_mnemonic!(self, "push rax");
+        self.push("rax");
     }
 
     fn gen_inc_or_dec(&mut self, expr: Expr, is_post: bool, is_inc: bool) {
@@ -398,16 +443,16 @@ impl Generator {
         let ty = expr.ty();
 
         self.gen_lvalue(expr);
-        add_mnemonic!(self, "pop rax");
+        self.pop("rax");
 
         self.gen_load("rbx", "rax", &ty);
 
         if is_post {
-            add_mnemonic!(self, "push rbx");
+            self.push("rbx");
             add_mnemonic!(self, "{} rbx", opcode);
         } else {
             add_mnemonic!(self, "{} rbx", opcode);
-            add_mnemonic!(self, "push rbx");
+            self.push("rbx");
         }
 
         self.gen_save("rax", "rbx", &ty);
@@ -417,14 +462,15 @@ impl Generator {
         match expr.kind {
             ExprKind::Literal(Literal::Number(num)) => {
                 add_mnemonic!(self, "push {}", num);
+                self.stack_size += 8;
             },
             ExprKind::Literal(Literal::String(num)) => {
                 add_mnemonic!(self, "lea rax, .Ltext{}[rip]", num);
-                add_mnemonic!(self, "push rax");
+                self.push("rax");
             },
             ExprKind::Literal(Literal::Float(num)) => {
                 add_mnemonic!(self, "movss xmm0, .Lfloat{}[rip]", num);
-                self.push_xmm(0);
+                self.push_xmm("xmm0");
             },
             ExprKind::Increment(expr, is_post) => self.gen_inc_or_dec(*expr, is_post, true),
             ExprKind::Decrement(expr, is_post) => self.gen_inc_or_dec(*expr, is_post, false),
@@ -447,20 +493,21 @@ impl Generator {
 
         self.gen_expr(expr);
         add_mnemonic!(self, "add rsp, {}", size);
+        self.stack_size -= size;
     }
 
     fn gen_return_stmt(&mut self, expr: Expr) {
         self.has_return = true;
         self.gen_expr(expr);
-        add_mnemonic!(self, "pop rax");
+        self.pop("rax");
         add_mnemonic!(self, "mov rsp, rbp");
-        add_mnemonic!(self, "pop rbp");
+        self.pop("rbp");
         add_mnemonic!(self, "ret");
     }
 
     fn gen_if_stmt(&mut self, cond: Expr, if_stmt: Stmt, else_stmt: Option<Box<Stmt>>) {
         self.gen_expr(cond);
-        add_mnemonic!(self, "pop rax");
+        self.pop("rax");
         add_mnemonic!(self, "cmp rax, 0");
         self.label_num += 1;
         let label_num = self.label_num;
@@ -489,7 +536,7 @@ impl Generator {
 
         // 条件式
         self.gen_expr(expr);
-        add_mnemonic!(self, "pop rax");
+        self.pop("rax");
         add_mnemonic!(self, "cmp rax, 0");
         add_mnemonic!(self, "je .Lend{}", label_num);
 
@@ -519,7 +566,7 @@ impl Generator {
         // 条件式
         if let Some(cond) = cond {
             self.gen_expr(cond);
-            add_mnemonic!(self, "pop rax");
+            self.pop("rax");
             add_mnemonic!(self, "cmp rax, 0");
             add_mnemonic!(self, "je .Lend{}", label_num);
         }
@@ -535,7 +582,7 @@ impl Generator {
 
         if let Some(loop_expr) = loop_expr {
             self.gen_expr(loop_expr);
-            add_mnemonic!(self, "pop rax");
+            self.pop("rax");
         }
 
         add_mnemonic!(self, "jmp .Lbegin{}", label_num);
@@ -565,7 +612,7 @@ impl Generator {
         let label_num = self.label_num;
 
         self.gen_expr(expr);
-        add_mnemonic!(self, "pop rax");
+        self.pop("rax");
 
         // caseにジャンプする処理
         let mut case_labels = Vec::new();
@@ -574,7 +621,7 @@ impl Generator {
             case_labels.push(self.label_num);
 
             self.gen_expr(case);
-            add_mnemonic!(self, "pop rbx");
+            self.pop("rbx");
             add_mnemonic!(self, "cmp rax, rbx");
             add_mnemonic!(self, "je .Lcase{}", self.label_num);
         }
@@ -653,7 +700,7 @@ impl Generator {
                 let ty = expr.ty();
                 self.gen_expr(expr);
 
-                add_mnemonic!(self, "pop rax");
+                self.pop("rax");
                 self.gen_save(&format!("rbp-{}", offset), "rax", &ty);
             },
         };
@@ -668,14 +715,18 @@ impl Generator {
 
                 add_label!(self, &name);
 
-                add_mnemonic!(self, "push rbp");
+                self.stack_size = 0;
+
+                self.push("rbp");
                 add_mnemonic!(self, "mov rbp, rsp");
                 add_mnemonic!(self, "sub rsp, {}", stack_size);
 
-                // スタックに引数の値を格納する
+                self.stack_size += stack_size;
+
+                // Store argument values to stack
                 for (i, arg) in args.into_iter().enumerate() {
                     let size = arg.ty.get_size();
-                    let register = self.get_size_register(size, ARG_REGISTERS[5 - i]).unwrap();
+                    let register = self.get_size_register(size, ARG_REGISTERS[i]).unwrap();
                     match arg.location {
                         Location::Local(offset) => add_mnemonic!(self, "mov [rbp-{}], {}", offset, register),
                         _ => panic!("引数がグローバル変数です"),
@@ -685,11 +736,13 @@ impl Generator {
                 self.has_return = false;
                 self.gen_stmt(block);
 
+                self.stack_size -= stack_size;
+
                 // return文がなかったら0を返す
                 if !self.has_return {
                     add_mnemonic!(self, "mov rax, 0");
                     add_mnemonic!(self, "mov rsp, rbp");
-                    add_mnemonic!(self, "pop rbp");
+                    self.pop("rbp");
                     add_mnemonic!(self, "ret");
                 }
             },
