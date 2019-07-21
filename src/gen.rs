@@ -104,11 +104,11 @@ impl Generator {
 
     fn push_xmm(&mut self, num: u8) {
         add_mnemonic!(self, "sub rsp, 4");
-        add_mnemonic!(self, "mov [rsp], xmm{}", num);
+        add_mnemonic!(self, "movss [rsp], xmm{}", num);
     }
 
     fn pop_xmm(&mut self, num: u8) {
-        add_mnemonic!(self, "cvtss2sd xmm{}, [rsp]", num);
+        add_mnemonic!(self, "movss xmm{}, [rsp]", num);
         add_mnemonic!(self, "add rsp, 4");
     }
 
@@ -191,36 +191,44 @@ impl Generator {
     }
     
     fn gen_load(&mut self, dst: &'static str, src: &'static str, ty: &Type) {
-        let size = match ty {
-            // Return address size
-            Type::Array(_, _) => 8,
-            ty => ty.get_size(),
-        };
+        if let Type::Float = ty {
+            add_mnemonic!(self, "movss {}, [{}]", dst, src);
+        } else {
+            let size = match ty {
+                // Return address size
+                Type::Array(_, _) => 8,
+                ty => ty.get_size(),
+            };
 
-        let size_str = self.get_size_str(size).unwrap();
-        let register = self.get_size_register(if size < 4 { 4 } else { size }, dst).unwrap();
-        let mov = match size {
-            1 | 2 => "movsx",
-            _ => "mov",
-        };
+            let size_str = self.get_size_str(size).unwrap();
+            let register = self.get_size_register(if size < 4 { 4 } else { size }, dst).unwrap();
+            let mov = match size {
+                1 | 2 => "movsx",
+                _ => "mov",
+            };
 
-        match ty {
-            // Return an address instead of accessing memory if dst type is array
-            Type::Array(_, _) => {},
-            _ => {
-                add_mnemonic!(self, "{} {}, {} [{}]", mov, register, size_str, src);
-            },
-        };
+            match ty {
+                // Return an address instead of accessing memory if dst type is array
+                Type::Array(_, _) => {},
+                _ => {
+                    add_mnemonic!(self, "{} {}, {} [{}]", mov, register, size_str, src);
+                },
+            };
+        }
     }
 
     fn gen_save(&mut self, dst: &str, src: &'static str, ty: &Type) {
-        let size = match ty {
-            Type::Array(_, _) => 8,
-            ty => ty.get_size(),
-        };
+        if let Type::Float = ty {
+            add_mnemonic!(self, "movss [rax], {}", src);
+        } else {
+            let size = match ty {
+                Type::Array(_, _) => 8,
+                ty => ty.get_size(),
+            };
 
-        let src = self.get_size_register(size, src).unwrap();
-        add_mnemonic!(self, "mov [{}], {}", dst, src);
+            let src = self.get_size_register(size, src).unwrap();
+            add_mnemonic!(self, "mov [{}], {}", dst, src);
+        }
     }
 
     fn gen_var_or_deref(&mut self, expr: Expr) {
@@ -228,8 +236,14 @@ impl Generator {
 
         self.gen_lvalue(expr);
         add_mnemonic!(self, "pop rax");
-        self.gen_load("rax", "rax", &ty);
-        add_mnemonic!(self, "push rax");
+
+        if let Type::Float = &ty {
+            self.gen_load("xmm0", "rax", &ty);
+            self.push_xmm(0);
+        } else {
+            self.gen_load("rax", "rax", &ty);
+            add_mnemonic!(self, "push rax");
+        }
     }
 
     fn gen_address(&mut self, variable: Variable) {
@@ -252,10 +266,22 @@ impl Generator {
         self.gen_lvalue(lhs);
         self.gen_expr(rhs);
 
-        add_mnemonic!(self, "pop rdx");
+        let register = if let Type::Float = rty {
+            self.pop_xmm(0);
+            "xmm0"
+        } else {
+            add_mnemonic!(self, "pop rdx");
+            "rdx"
+        };
+
         add_mnemonic!(self, "pop rax");
-        self.gen_save("rax", "rdx", &rty);
-        add_mnemonic!(self, "push rdx");
+        self.gen_save("rax", register, &rty);
+
+        if let Type::Float = rty {
+            self.push_xmm(0);
+        } else {
+            add_mnemonic!(self, "push rdx");
+        }
     }
 
     fn gen_infix(&mut self, kind: Infix, lhs: Expr, rhs: Expr) {
@@ -414,8 +440,13 @@ impl Generator {
     }
 
     fn gen_expr_stmt(&mut self, expr: Expr) {
+        let size = match &expr.ty {
+            Some(Type::Float) => 4,
+            _ => 8,
+        };
+
         self.gen_expr(expr);
-        add_mnemonic!(self, "pop rax");
+        add_mnemonic!(self, "add rsp, {}", size);
     }
 
     fn gen_return_stmt(&mut self, expr: Expr) {
