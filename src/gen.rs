@@ -213,6 +213,16 @@ impl Generator {
         };
     }
 
+    fn gen_save(&mut self, dst: &str, src: &'static str, ty: &Type) {
+        let size = match ty {
+            Type::Array(_, _) => 8,
+            ty => ty.get_size(),
+        };
+
+        let src = self.get_size_register(size, src).unwrap();
+        add_mnemonic!(self, "mov [{}], {}", dst, src);
+    }
+
     fn gen_var_or_deref(&mut self, expr: Expr) {
         let ty = expr.ty();
 
@@ -237,15 +247,15 @@ impl Generator {
     }
 
     fn gen_assign(&mut self, lhs: Expr, rhs: Expr) {
-        let size = self.gen_lvalue(lhs);
-        if let Some(size) = size {
-            self.gen_expr(rhs);
+        let rty = rhs.ty();
 
-            add_mnemonic!(self, "pop rdx");
-            add_mnemonic!(self, "pop rax");
-            add_mnemonic!(self, "mov {} [rax], {}", self.get_size_str(size).unwrap(), self.get_size_register(size, "rdx").unwrap());
-            add_mnemonic!(self, "push rdx");
-        }
+        self.gen_lvalue(lhs);
+        self.gen_expr(rhs);
+
+        add_mnemonic!(self, "pop rdx");
+        add_mnemonic!(self, "pop rax");
+        self.gen_save("rax", "rdx", &rty);
+        add_mnemonic!(self, "push rdx");
     }
 
     fn gen_infix(&mut self, kind: Infix, lhs: Expr, rhs: Expr) {
@@ -360,12 +370,10 @@ impl Generator {
     fn gen_inc_or_dec(&mut self, expr: Expr, is_post: bool, is_inc: bool) {
         let opcode = if is_inc { "inc" } else { "dec" };
         let ty = expr.ty();
-        let size = ty.get_size();
 
         self.gen_lvalue(expr);
         add_mnemonic!(self, "pop rax");
 
-        // Load
         self.gen_load("rbx", "rax", &ty);
 
         if is_post {
@@ -376,9 +384,7 @@ impl Generator {
             add_mnemonic!(self, "push rbx");
         }
 
-        // Save
-        let bx = self.get_size_register(size, "rbx").unwrap();
-        add_mnemonic!(self, "mov [rax], {}", bx);
+        self.gen_save("rax", "rbx", &ty);
     }
 
     fn gen_expr(&mut self, expr: Expr) {
@@ -613,10 +619,11 @@ impl Generator {
                 _ => panic!(),
             },
             InitializerKind::Expr(expr) => {
+                let ty = expr.ty();
                 self.gen_expr(expr);
-                let register = self.get_size_register(ty.get_size(), "rax").unwrap();
+
                 add_mnemonic!(self, "pop rax");
-                add_mnemonic!(self, "mov [rbp-{}], {}", offset, register);
+                self.gen_save(&format!("rbp-{}", offset), "rax", &ty);
             },
         };
     }
