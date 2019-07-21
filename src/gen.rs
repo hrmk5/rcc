@@ -102,6 +102,16 @@ impl Generator {
         }
     }
 
+    fn push_xmm(&mut self, num: u8) {
+        add_mnemonic!(self, "sub rsp, 4");
+        add_mnemonic!(self, "mov [rsp], xmm{}", num);
+    }
+
+    fn pop_xmm(&mut self, num: u8) {
+        add_mnemonic!(self, "cvtss2sd xmm{}, [rsp]", num);
+        add_mnemonic!(self, "add rsp, 4");
+    }
+
     fn gen_dereference(&mut self, expr: Expr) {
         match expr.kind {
             ExprKind::Dereference(expr) => {
@@ -179,29 +189,37 @@ impl Generator {
             },
         }
     }
+    
+    fn gen_load(&mut self, dst: &'static str, src: &'static str, ty: &Type) {
+        let size = match ty {
+            // Return address size
+            Type::Array(_, _) => 8,
+            ty => ty.get_size(),
+        };
+
+        let size_str = self.get_size_str(size).unwrap();
+        let register = self.get_size_register(if size < 4 { 4 } else { size }, dst).unwrap();
+        let mov = match size {
+            1 | 2 => "movsx",
+            _ => "mov",
+        };
+
+        match ty {
+            // Return an address instead of accessing memory if dst type is array
+            Type::Array(_, _) => {},
+            _ => {
+                add_mnemonic!(self, "{} {}, {} [{}]", mov, register, size_str, src);
+            },
+        };
+    }
 
     fn gen_var_or_deref(&mut self, expr: Expr) {
         let ty = expr.ty();
-        let size = self.gen_lvalue(expr);
 
-        if let Some(size) = size {
-            let size_str = self.get_size_str(size).unwrap();
-            let register = self.get_size_register(if size == 1 || size == 2 { 4 } else { size }, "rax").unwrap();
-            let mov = match size {
-                1 | 2 => "movsx",
-                _ => "mov",
-            };
-
-            match ty {
-                // 配列型だったらメモリアクセスせずにアドレスを返す
-                Type::Array(_, _) => {},
-                _ => {
-                    add_mnemonic!(self, "pop rax");
-                    add_mnemonic!(self, "{} {}, {} [rax]", mov, register, size_str);
-                    add_mnemonic!(self, "push rax");
-                },
-            };
-        }
+        self.gen_lvalue(expr);
+        add_mnemonic!(self, "pop rax");
+        self.gen_load("rax", "rax", &ty);
+        add_mnemonic!(self, "push rax");
     }
 
     fn gen_address(&mut self, variable: Variable) {
@@ -341,16 +359,14 @@ impl Generator {
 
     fn gen_inc_or_dec(&mut self, expr: Expr, is_post: bool, is_inc: bool) {
         let opcode = if is_inc { "inc" } else { "dec" };
-        let size = expr.ty.clone().unwrap().get_size();
+        let ty = expr.ty();
+        let size = ty.get_size();
 
         self.gen_lvalue(expr);
         add_mnemonic!(self, "pop rax");
 
         // Load
-        let mov = if size < 4 { "movsx" } else { "mov" };
-        let size_str = self.get_size_str(size).unwrap();
-        let ax = self.get_size_register(if size < 4 { 4 } else { size }, "rbx").unwrap();
-        add_mnemonic!(self, "{} {}, {} [rax]", mov, ax, size_str);
+        self.gen_load("rbx", "rax", &ty);
 
         if is_post {
             add_mnemonic!(self, "push rbx");
@@ -373,6 +389,10 @@ impl Generator {
             ExprKind::Literal(Literal::String(num)) => {
                 add_mnemonic!(self, "lea rax, .Ltext{}[rip]", num);
                 add_mnemonic!(self, "push rax");
+            },
+            ExprKind::Literal(Literal::Float(num)) => {
+                add_mnemonic!(self, "movss xmm0, .Lfloat{}[rip]", num);
+                self.push_xmm(0);
             },
             ExprKind::Increment(expr, is_post) => self.gen_inc_or_dec(*expr, is_post, true),
             ExprKind::Decrement(expr, is_post) => self.gen_inc_or_dec(*expr, is_post, false),
@@ -751,6 +771,13 @@ impl Generator {
         for (i, string) in program.string_list.into_iter().enumerate() {
             add_label!(self, ".Ltext", i);
             add_mnemonic!(self, ".string \"{}\"", string);
+        }
+
+        // Floating point number literals
+        self.code.push_str(".section .data\n");
+        for (i, float_num) in program.float_list.into_iter().enumerate() {
+            add_label!(self, ".Lfloat", i);
+            add_mnemonic!(self, ".long {}", float_num.to_bits());
         }
 
         self.gen_global_var(&program.declarations);
