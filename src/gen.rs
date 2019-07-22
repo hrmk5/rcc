@@ -351,8 +351,8 @@ impl Generator {
         self.gen_expr(lhs);
         self.gen_expr(rhs);
 
-        self.pop_and_convert("xmm1", &Type::Float, &lty);
-        self.pop_and_convert("xmm0", &Type::Float, &rty);
+        self.pop_and_convert("xmm1", &Type::Float, &rty);
+        self.pop_and_convert("xmm0", &Type::Float, &lty);
 
         let mut label_num = None;
         match kind {
