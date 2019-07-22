@@ -9,7 +9,7 @@ atexit() {
 
 trap atexit EXIT
 
-cargo run --quiet "$input" > "$tmpfile"
+cargo run "$input" > "$tmpfile"
 if [ $? -ne 0 ]; then
     cat "$tmpfile"
     exit 1
