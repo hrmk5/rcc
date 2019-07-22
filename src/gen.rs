@@ -430,33 +430,35 @@ impl Generator {
     }
 
     fn gen_call(&mut self, name: String, args: Vec<Expr>) {
-        let mut regs: Vec<(&'static str, Type)> = Vec::new();
-        let mut arg_reg = 0;
-        let mut xmm_arg_reg = 0;
+        let mut types: Vec<Type> = Vec::new();
         for arg_expr in args.clone() {
-            let ty = arg_expr.ty();
-            match &ty {
-                Type::Float => {
-                    regs.push((XMM_ARG_REGISTERS[xmm_arg_reg], ty));
-                    xmm_arg_reg += 1;
-                },
-                _ => {
-                    regs.push((ARG_REGISTERS[arg_reg], ty));
-                    arg_reg += 1;
-                },
-            };
-
+            types.push(arg_expr.ty());
             self.gen_expr(arg_expr);
         }
 
-        let args = self.functions[&name].clone().into_iter();
-        for ((reg, ty), param_ty) in regs.into_iter().zip(args).rev() {
+        let mut arg_reg = 0;
+        let mut xmm_arg_reg = 0;
+        let params = self.functions[&name].clone();
+        for (ty, param_ty) in types.into_iter().zip(params.into_iter()).rev() {
+            let reg = match param_ty {
+                Type::Float => {
+                    xmm_arg_reg += 1;
+                    XMM_ARG_REGISTERS[xmm_arg_reg - 1]
+                },
+                _ => {
+                    arg_reg += 1;
+                    ARG_REGISTERS[arg_reg - 1]
+                },
+            };
+
             if name == "printf" {
                 // TODO: Remove later
                 if let Type::Float = ty {
                     add_mnemonic!(self, "cvtss2sd {}, [rsp]", reg);
                     add_mnemonic!(self, "add rsp, 4");
                     self.stack_size -= 4;
+                } else {
+                    self.pop_and_convert(reg, &param_ty, &ty);
                 }
             } else {
                 self.pop_and_convert(reg, &param_ty, &ty);
@@ -782,12 +784,19 @@ impl Generator {
                 self.stack_size += stack_size;
 
                 // Store argument values to stack
-                for (i, arg) in args.into_iter().enumerate() {
-                    let size = arg.ty.get_size();
-                    let register = self.get_size_register(size, ARG_REGISTERS[i]).unwrap();
-                    match arg.location {
-                        Location::Local(offset) => add_mnemonic!(self, "mov [rbp-{}], {}", offset, register),
-                        _ => panic!("引数がグローバル変数です"),
+                let mut reg = 0;
+                let mut xmm_reg = 0;
+                for arg in args {
+                    let dst = format!("rbp-{}", arg.offset());
+                    match arg.ty {
+                        Type::Float => {
+                            self.gen_save(&dst, XMM_ARG_REGISTERS[xmm_reg], &Type::Float);
+                            xmm_reg += 1;
+                        },
+                        ty => {
+                            self.gen_save(&dst, ARG_REGISTERS[reg], &ty);
+                            reg += 1;
+                        },
                     };
                 }
 
