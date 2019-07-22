@@ -119,15 +119,15 @@ impl Generator {
     }
 
     fn push_xmm(&mut self, reg: &'static str) {
-        add_mnemonic!(self, "sub rsp, 4");
+        add_mnemonic!(self, "sub rsp, 8");
         add_mnemonic!(self, "movss [rsp], {}", reg);
-        self.stack_size += 4;
+        self.stack_size += 8;
     }
 
     fn pop_xmm(&mut self, reg: &'static str) {
         add_mnemonic!(self, "movss {}, [rsp]", reg);
-        add_mnemonic!(self, "add rsp, 4");
-        self.stack_size -= 4;
+        add_mnemonic!(self, "add rsp, 8");
+        self.stack_size -= 8;
     }
 
     fn gen_dereference(&mut self, expr: Expr) {
@@ -210,13 +210,8 @@ impl Generator {
 
     fn pop_and_convert(&mut self, dst: &'static str, dst_ty: &Type, src_ty: &Type) {
         self.gen_load_and_convert(dst, "rsp", dst_ty, src_ty);
-        if let Type::Float = src_ty {
-            add_mnemonic!(self, "add rsp, 4");
-            self.stack_size -= 4;
-        } else {
-            add_mnemonic!(self, "add rsp, 8");
-            self.stack_size -= 8;
-        }
+        add_mnemonic!(self, "add rsp, 8");
+        self.stack_size -= 8;
     }
 
     fn gen_load_and_convert(&mut self, dst: &'static str, src: &'static str, dst_ty: &Type, src_ty: &Type) {
@@ -516,8 +511,8 @@ impl Generator {
                 // TODO: Remove later
                 if let Type::Float = ty {
                     add_mnemonic!(self, "cvtss2sd {}, [rsp]", reg);
-                    add_mnemonic!(self, "add rsp, 4");
-                    self.stack_size -= 4;
+                    add_mnemonic!(self, "add rsp, 8");
+                    self.stack_size -= 8;
                 } else {
                     self.pop_and_convert(reg, &param_ty, &ty);
                 }
@@ -597,14 +592,9 @@ impl Generator {
     }
 
     fn gen_expr_stmt(&mut self, expr: Expr) {
-        let size = match &expr.ty {
-            Some(Type::Float) => 4,
-            _ => 8,
-        };
-
         self.gen_expr(expr);
-        add_mnemonic!(self, "add rsp, {}", size);
-        self.stack_size -= size;
+        add_mnemonic!(self, "add rsp, 8");
+        self.stack_size -= 8;
     }
 
     fn gen_return_stmt(&mut self, expr: Expr) {
