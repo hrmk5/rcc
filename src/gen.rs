@@ -489,16 +489,13 @@ impl Generator {
     }
 
     fn gen_call(&mut self, name: String, args: Vec<Expr>) {
-        let mut types: Vec<Type> = Vec::new();
-        for arg_expr in args.clone() {
-            types.push(arg_expr.ty());
-            self.gen_expr(arg_expr);
-        }
+        let params = self.functions[&name].clone();
 
         let mut arg_reg = 0;
         let mut xmm_arg_reg = 0;
-        let params = self.functions[&name].clone();
-        for (ty, param_ty) in types.into_iter().zip(params.into_iter()).rev() {
+
+        let mut types: Vec<(Type, &'static str)> = Vec::new();
+        for (arg_expr, param_ty) in args.clone().into_iter().zip(params.iter()) {
             let reg = match param_ty {
                 Type::Float => {
                     xmm_arg_reg += 1;
@@ -510,6 +507,11 @@ impl Generator {
                 },
             };
 
+            types.push((arg_expr.ty(), reg));
+            self.gen_expr(arg_expr);
+        }
+
+        for ((ty, reg), param_ty) in types.into_iter().zip(params.into_iter()).rev() {
             if name == "printf" {
                 // TODO: Remove later
                 if let Type::Float = ty {
