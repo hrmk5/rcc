@@ -250,6 +250,15 @@ int main() {
     long h = 214109;
     expect("long", 214109, h);
 
+    // float float1 = 51.3;
+    // expect("float", 51.3, float1);
+    // int float2 = 31.99;
+    // expect("int <- float", 31, float2);
+    // char float3 = 239.53;
+    // expect("char <- float", 239, float3);
+    // float float4 = 61;
+    // expect("float <- int", 61, float4);
+
     enum {
         FIVE,
         SIX = 10,

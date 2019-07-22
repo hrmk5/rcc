@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::ast::*;
 
 pub struct Generator {
@@ -9,6 +10,7 @@ pub struct Generator {
     continue_label_stack: Vec<u32>,
     default_label: Vec<u32>,
     stack_size: usize,
+    functions: HashMap<String, Vec<Type>>,
 }
 
 const ARG_REGISTERS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
@@ -52,6 +54,7 @@ impl Generator {
             continue_label_stack: Vec::new(),
             default_label: Vec::new(),
             stack_size: 0,
+            functions: HashMap::new(),
         }
     }
 
@@ -204,6 +207,47 @@ impl Generator {
             },
         }
     }
+
+    fn pop_and_convert(&mut self, dst: &'static str, dst_ty: &Type, src_ty: &Type) {
+        self.gen_load_and_convert(dst, "rsp", dst_ty, src_ty);
+        if let Type::Float = src_ty {
+            add_mnemonic!(self, "add rsp, 4");
+            self.stack_size -= 4;
+        } else {
+            add_mnemonic!(self, "add rsp, 8");
+            self.stack_size -= 8;
+        }
+    }
+
+    fn gen_load_and_convert(&mut self, dst: &'static str, src: &'static str, dst_ty: &Type, src_ty: &Type) {
+        let size_str = match src_ty {
+            Type::Array(_, _) => self.get_size_str(8),
+            ty => self.get_size_str(ty.get_size()),
+        }.unwrap();
+
+        match (src_ty, dst_ty) {
+            // float <- float
+            (Type::Float, Type::Float) => {
+                add_mnemonic!(self, "movss {}, {} [{}]", dst, size_str, src);
+            },
+            // integer <- float
+            (Type::Float, dst_ty) if dst_ty.is_integer() => {
+                add_mnemonic!(self, "cvttss2si {}, {} [{}]", dst, size_str, src);
+            },
+            // float <- integer
+            (src_ty, Type::Float) if src_ty.is_integer() => {
+                if src_ty.get_size() < 4 {
+                    add_mnemonic!(self, "movsx eax, {} [{}]", size_str, src);
+                    add_mnemonic!(self, "cvtsi2ss {}, eax", dst);
+                } else {
+                    add_mnemonic!(self, "cvtsi2ss {}, {} [{}]", dst, size_str, src);
+                }
+            },
+            // integer <- integer
+            _ => self.gen_load(dst, src, dst_ty),
+        };
+    }
+
     
     fn gen_load(&mut self, dst: &'static str, src: &'static str, ty: &Type) {
         if let Type::Float = ty {
@@ -232,11 +276,11 @@ impl Generator {
         }
     }
 
-    fn gen_save(&mut self, dst: &str, src: &'static str, ty: &Type) {
-        if let Type::Float = ty {
-            add_mnemonic!(self, "movss [rax], {}", src);
+    fn gen_save(&mut self, dst: &str, src: &'static str, dst_ty: &Type) {
+        if let Type::Float = dst_ty {
+            add_mnemonic!(self, "movss [{}], {}", dst, src);
         } else {
-            let size = match ty {
+            let size = match dst_ty {
                 Type::Array(_, _) => 8,
                 ty => ty.get_size(),
             };
@@ -276,23 +320,24 @@ impl Generator {
     }
 
     fn gen_assign(&mut self, lhs: Expr, rhs: Expr) {
+        let lty = lhs.ty();
         let rty = rhs.ty();
 
         self.gen_lvalue(lhs);
         self.gen_expr(rhs);
-
-        let register = if let Type::Float = rty {
-            self.pop_xmm("xmm0");
+        
+        let register = if let Type::Float = lty {
+            self.pop_and_convert("xmm0", &lty, &rty);
             "xmm0"
         } else {
-            self.pop("rdx");
+            self.pop_and_convert("rdx", &lty, &rty);
             "rdx"
         };
-
+        
         self.pop("rax");
-        self.gen_save("rax", register, &rty);
-
-        if let Type::Float = rty {
+        self.gen_save("rax", register, &lty);
+        
+        if let Type::Float = lty {
             self.push_xmm("xmm0");
         } else {
             self.push("rdx");
@@ -404,14 +449,17 @@ impl Generator {
             self.gen_expr(arg_expr);
         }
 
-        for (reg, ty) in regs.into_iter().rev() {
-            match &ty {
-                Type::Float => {
+        let args = self.functions[&name].clone().into_iter();
+        for ((reg, ty), param_ty) in regs.into_iter().zip(args).rev() {
+            if name == "printf" {
+                // TODO: Remove later
+                if let Type::Float = ty {
                     add_mnemonic!(self, "cvtss2sd {}, [rsp]", reg);
                     add_mnemonic!(self, "add rsp, 4");
                     self.stack_size -= 4;
-                },
-                _ => self.pop(reg),
+                }
+            } else {
+                self.pop_and_convert(reg, &param_ty, &ty);
             }
         }
 
@@ -697,11 +745,19 @@ impl Generator {
                 _ => panic!(),
             },
             InitializerKind::Expr(expr) => {
-                let ty = expr.ty();
+                let dst_ty = ty;
+                let src_ty = expr.ty();
                 self.gen_expr(expr);
 
-                self.pop("rax");
-                self.gen_save(&format!("rbp-{}", offset), "rax", &ty);
+                let reg = if let Type::Float = dst_ty {
+                    self.pop_and_convert("xmm0", dst_ty, &src_ty);
+                    "xmm0"
+                } else {
+                    self.pop_and_convert("rax", dst_ty, &src_ty);
+                    "rax"
+                };
+
+                self.gen_save(&format!("rbp-{}", offset), reg, dst_ty);
             },
         };
     }
@@ -709,6 +765,8 @@ impl Generator {
     pub fn gen_declaration(&mut self, declaration: Declaration) {
         match declaration.kind {
             DeclarationKind::Func(name, _, args, stack_size, block, is_static) => {
+                self.functions.insert(name.clone(), args.clone().into_iter().map(|arg| arg.ty).collect());
+
                 if !is_static {
                     self.code.push_str(&format!(".global {}\n", name));
                 }
@@ -746,6 +804,8 @@ impl Generator {
                     add_mnemonic!(self, "ret");
                 }
             },
+            DeclarationKind::Prototype(name, _, args) => { self.functions.insert(name.clone(), args.clone()); },
+            DeclarationKind::Extern(box Declaration { kind: DeclarationKind::Prototype(name, _, args), .. }) => { self.functions.insert(name.clone(), args.clone()); },
             _ => {},
         }
     }

@@ -86,6 +86,17 @@ impl Type {
         }
     }
 
+    pub fn is_integer(&self) -> bool {
+        self.is_number() && !self.is_floating_number()
+    }
+
+    pub fn is_floating_number(&self) -> bool {
+        match self {
+            Type::Float => true,
+            _ => false,
+        }
+    }
+
     pub fn can_assign_to(&self, ty: &Type) -> bool {
         let lty = ty;
         let rty = self;
