@@ -344,7 +344,58 @@ impl Generator {
         }
     }
 
-    fn gen_infix(&mut self, kind: Infix, lhs: Expr, rhs: Expr) {
+    fn gen_infix_float(&mut self, kind: Infix, lhs: Expr, rhs: Expr) {
+        let lty = lhs.ty();
+        let rty = rhs.ty();
+
+        self.gen_expr(lhs);
+        self.gen_expr(rhs);
+
+        self.pop_and_convert("xmm1", &Type::Float, &lty);
+        self.pop_and_convert("xmm0", &Type::Float, &rty);
+
+        let mut label_num = None;
+        match kind {
+            Infix::Add => add_mnemonic!(self, "addss xmm0, xmm1"),
+            Infix::Sub => add_mnemonic!(self, "subss xmm0, xmm1"),
+            Infix::Mul => add_mnemonic!(self, "mulss xmm0, xmm1"),
+            Infix::Div => add_mnemonic!(self, "divss xmm0, xmm1"),
+            Infix::LessThan => {
+                label_num = Some(self.label_num);
+                add_mnemonic!(self, "comiss xmm1, xmm0");
+                add_mnemonic!(self, "jbe .Lelse{}", label_num.unwrap());
+            },
+            Infix::LessThanOrEqual => {
+                label_num = Some(self.label_num);
+                add_mnemonic!(self, "comiss xmm1, xmm0");
+                add_mnemonic!(self, "jb .Lelse{}", label_num.unwrap());
+            },
+            Infix::Equal => {
+                label_num = Some(self.label_num);
+                add_mnemonic!(self, "ucomiss xmm0, xmm1");
+                add_mnemonic!(self, "jne .Lelse{}", label_num.unwrap());
+            },
+            Infix::NotEqual => {
+                label_num = Some(self.label_num);
+                add_mnemonic!(self, "ucomiss xmm0, xmm1");
+                add_mnemonic!(self, "je .Lelse{}", label_num.unwrap());
+            },
+            _ => panic!(),
+        };
+
+        if let Some(label_num) = label_num {
+            self.label_num += 1;
+            add_mnemonic!(self, "movss xmm0, .Lfone");
+            add_mnemonic!(self, "jmp .Lend{}", label_num);
+            add_label!(self, ".Lelse", label_num);
+            add_mnemonic!(self, "pxor xmm0, xmm0");
+            add_label!(self, ".Lend", label_num);
+        }
+
+        self.push_xmm("xmm0");
+    }
+
+    fn gen_infix_integer(&mut self, kind: Infix, lhs: Expr, rhs: Expr) {
         match kind.clone() {
             Infix::Add | Infix::Sub => match (lhs.ty(), rhs.ty()) {
                 (Type::Pointer(ty), Type::Int) | (Type::Array(ty, _), Type::Int) => {
@@ -427,6 +478,14 @@ impl Generator {
         };
 
         self.push("rax");
+    }
+
+    fn gen_infix(&mut self, kind: Infix, lhs: Expr, rhs: Expr) {
+        if lhs.ty().is_integer() && rhs.ty().is_integer() {
+            self.gen_infix_integer(kind, lhs, rhs);
+        } else {
+            self.gen_infix_float(kind, lhs, rhs);
+        }
     }
 
     fn gen_call(&mut self, name: String, args: Vec<Expr>) {
@@ -934,11 +993,15 @@ impl Generator {
         }
 
         // Floating point number literals
-        self.code.push_str(".section .data\n");
+        self.code.push_str(".data\n");
+        add_label!(self, ".Lfone");
+        add_mnemonic!(self, ".long 1065353216");
         for (i, float_num) in program.float_list.into_iter().enumerate() {
             add_label!(self, ".Lfloat", i);
             add_mnemonic!(self, ".long {}", float_num.to_bits());
         }
+
+
 
         self.gen_global_var(&program.declarations);
 

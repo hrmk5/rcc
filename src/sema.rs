@@ -49,6 +49,23 @@ impl Analyzer {
         }
     }
 
+    fn check_infix(&mut self, kind: &Infix, lhs: &Expr, rhs: &Expr, span: &Span) -> bool {
+        let lty = lhs.ty();
+        let rty = rhs.ty();
+
+        if lty.is_floating_number() || rty.is_floating_number() {
+            match kind {
+                Infix::Add | Infix::Sub | Infix::Mul | Infix::Div | Infix::Equal | Infix::NotEqual | Infix::LessThan | Infix::LessThanOrEqual => true,
+                _ => {
+                    self.add_error("小数の計算ができる演算子ではありません", span);
+                    false
+                },
+            }
+        } else {
+            true
+        }
+    }
+
     fn walk_expr(&mut self, expr: &mut Expr) {
         // sizeofは数値リテラルに置き換える
         if let ExprKind::SizeOf(inner_expr) = &mut expr.kind.clone() {
@@ -91,16 +108,23 @@ impl Analyzer {
             ExprKind::Infix(infix, lhs, rhs) => {
                 let lty = self.get_type(lhs);
                 let rty = self.get_type(rhs);
-                Some(match infix {
-                    Infix::Add | Infix::Sub => {
-                        match (lty, rty) {
-                            (Type::Pointer(ty), _) | (_, Type::Pointer(ty)) => Type::Pointer(ty),
-                            (Type::Array(ty, _), _) | (_, Type::Array(ty, _)) => Type::Pointer(ty),
-                            _ => Type::Int,
-                        }
-                    },
-                    _ => Type::Int,
-                })
+
+                if !self.check_infix(&infix, &lhs, &rhs, &expr.span) {
+                    None
+                } else if lty.is_floating_number() || rty.is_floating_number() {
+                    Some(Type::Float)
+                } else {
+                    Some(match infix {
+                        Infix::Add | Infix::Sub => {
+                            match (lty, rty) {
+                                (Type::Pointer(ty), _) | (_, Type::Pointer(ty)) => Type::Pointer(ty),
+                                (Type::Array(ty, _), _) | (_, Type::Array(ty, _)) => Type::Pointer(ty),
+                                _ => Type::Int,
+                            }
+                        },
+                        _ => Type::Int,
+                    })
+                }
             },
             ExprKind::Call(name, args) => {
                 for arg in args.iter_mut() {

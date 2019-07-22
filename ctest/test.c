@@ -258,6 +258,11 @@ int main() {
     // expect("char <- float", 239, float3);
     // float float4 = 61;
     // expect("float <- int", 61, float4);
+    // expect("35.5 > 51.535", 0, 35.5 > 51.535);
+    // expect("5.0 >= 5", 1, 5.0 >= 5);
+    // expect("3.5 < 10034.5", 1, 3.5 < 10034.5);
+    // expect("2.5 + 2.5 == 5.0", 1, 2.5 + 2.5 == 5.0);
+    // expect("3.513 != 3.513", 0, 3.513 != 3.513);
 
     enum {
         FIVE,
