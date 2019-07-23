@@ -481,7 +481,7 @@ impl Generator {
     }
 
     fn gen_infix(&mut self, kind: Infix, lhs: Expr, rhs: Expr) {
-        if lhs.ty().is_floating_number() && rhs.ty().is_floating_number() {
+        if lhs.ty().is_floating_number() || rhs.ty().is_floating_number() {
             self.gen_infix_float(kind, lhs, rhs);
         } else {
             self.gen_infix_integer(kind, lhs, rhs);

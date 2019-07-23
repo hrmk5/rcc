@@ -3,5 +3,7 @@
 #define ADD(a, b) a + b
 
 extern int external_var;
+extern int failed;
 
 int expect(char *name, int expected, int actual);
+void expect_f(char *name, float expected, float actual);
