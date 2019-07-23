@@ -182,15 +182,24 @@ impl Analyzer {
                 }
             },
             ExprKind::Increment(expr, _) => {
+                let ty = self.get_type(expr);
+
                 if !self.is_lvalue(&expr) {
                     self.add_error("左辺値ではありません", &expr.span);
                     None
                 } else {
-                    Some(self.get_type(expr))
+                    Some(ty)
                 }
             },
             ExprKind::Decrement(expr, _) => {
-                Some(self.get_type(expr))
+                let ty = self.get_type(expr);
+
+                if !self.is_lvalue(&expr) {
+                    self.add_error("左辺値ではありません", &expr.span);
+                    None
+                } else {
+                    Some(ty)
+                }
             },
             ExprKind::Invalid => panic!("Unexpected invalid expression"),
             ExprKind::SizeOf(_) => panic!("Unexpected sizeof unary operator"),
@@ -256,8 +265,12 @@ impl Analyzer {
                 }
             },
             StmtKind::Switch(expr, _, stmt, _) => {
-                // TODO: exprが整数ではないとエラーを出す
                 self.walk_expr(expr);
+
+                if !expr.ty().is_integer() {
+                    self.add_error("整数ではありません", &expr.span);
+                }
+
                 self.walk_stmt(stmt, true, true, allow_continue);
             },
             StmtKind::Case(expr) => {
@@ -265,8 +278,12 @@ impl Analyzer {
                     self.add_error("switch文の中以外でcaseは使用できません", &stmt.span)
                 }
 
-                // TODO: exprが整数ではないとエラーを出す
                 self.walk_expr(expr);
+
+                if !expr.ty().is_integer() {
+                    self.add_error("整数ではありません", &expr.span);
+                    return;
+                }
             }
             StmtKind::Break => {
                 if !allow_break {
