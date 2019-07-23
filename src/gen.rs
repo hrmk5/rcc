@@ -627,6 +627,9 @@ impl Generator {
         add_mnemonic!(self, "mov rsp, rbp");
         self.pop("rbp");
         add_mnemonic!(self, "ret");
+
+        // Add size of rbp for return statements below
+        self.stack_size += 8;
     }
 
     fn gen_if_stmt(&mut self, cond: Expr, if_stmt: Stmt, else_stmt: Option<Box<Stmt>>) {
