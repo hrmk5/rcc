@@ -1,6 +1,12 @@
 use std::collections::HashMap;
 use crate::ast::*;
 
+#[derive(Clone, Debug)]
+struct Function {
+    return_type: Type,
+    params: Vec<Type>,
+}
+
 pub struct Generator {
     pub code: String,
     label_num: u32,
@@ -10,7 +16,8 @@ pub struct Generator {
     continue_label_stack: Vec<u32>,
     default_label: Vec<u32>,
     stack_size: usize,
-    functions: HashMap<String, Vec<Type>>,
+    functions: HashMap<String, Function>,
+    curr_func: String,
 }
 
 const ARG_REGISTERS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
@@ -55,6 +62,7 @@ impl Generator {
             default_label: Vec::new(),
             stack_size: 0,
             functions: HashMap::new(),
+            curr_func: String::new(),
         }
     }
 
@@ -489,7 +497,7 @@ impl Generator {
     }
 
     fn gen_call(&mut self, name: String, args: Vec<Expr>) {
-        let params = self.functions[&name].clone();
+        let Function { params, return_type, .. } = self.functions[&name].clone();
 
         let mut arg_reg = 0;
         let mut xmm_arg_reg = 0;
@@ -539,7 +547,12 @@ impl Generator {
             add_mnemonic!(self, "add rsp, {}", padding);
         }
 
-        self.push("rax");
+        // Push return value
+        if return_type.is_floating_number() {
+            self.push_xmm("xmm0");
+        } else {
+            self.push("rax");
+        }
     }
 
     fn gen_bit_not(&mut self, expr: Expr) {
@@ -638,9 +651,19 @@ impl Generator {
     }
 
     fn gen_return_stmt(&mut self, expr: Expr) {
+        let return_type = self.functions[&self.curr_func].return_type.clone();
+        let ty = expr.ty();
+
         self.has_return = true;
         self.gen_expr(expr);
-        self.pop("rax");
+
+        let reg = if return_type.is_floating_number() {
+            "xmm0"
+        } else {
+            "rax"
+        };
+
+        self.pop_and_convert(reg, &return_type, &ty);
         add_mnemonic!(self, "mov rsp, rbp");
         self.pop("rbp");
         add_mnemonic!(self, "ret");
@@ -850,8 +873,12 @@ impl Generator {
 
     pub fn gen_declaration(&mut self, declaration: Declaration) {
         match declaration.kind {
-            DeclarationKind::Func(name, _, args, stack_size, block, is_static) => {
-                self.functions.insert(name.clone(), args.clone().into_iter().map(|arg| arg.ty).collect());
+            DeclarationKind::Func(name, return_type, args, stack_size, block, is_static) => {
+                self.curr_func = name.clone();
+                self.functions.insert(name.clone(), Function {
+                    return_type,
+                    params: args.clone().into_iter().map(|arg| arg.ty).collect(),
+                });
 
                 if !is_static {
                     self.code.push_str(&format!(".global {}\n", name));
@@ -897,8 +924,14 @@ impl Generator {
                     add_mnemonic!(self, "ret");
                 }
             },
-            DeclarationKind::Prototype(name, _, args) => { self.functions.insert(name.clone(), args.clone()); },
-            DeclarationKind::Extern(box Declaration { kind: DeclarationKind::Prototype(name, _, args), .. }) => { self.functions.insert(name.clone(), args.clone()); },
+            DeclarationKind::Prototype(name, return_type, args) => { self.functions.insert(name.clone(), Function {
+                return_type,
+                params: args,
+            } ); },
+            DeclarationKind::Extern(box Declaration { kind: DeclarationKind::Prototype(name, return_type, args), .. }) => { self.functions.insert(name.clone(), Function {
+                return_type,
+                params: args,
+            } ); },
             _ => {},
         }
     }

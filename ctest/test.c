@@ -19,6 +19,10 @@ int calc() {
 void no_return() {
 }
 
+float return_float(float a) {
+    return a;
+}
+
 int global_var;
 int global_a = 10;
 int *global_b = &global_a;
@@ -272,6 +276,8 @@ int main() {
     expect_f("post-increment of float type", 9.3, ++float5);
     expect_f("pre-decrement of float type", 9.3, float5--);
     expect_f("post-decrement of float type", 7.3, --float5);
+
+    expect_f("function to return float type", 9.32, return_float(9.32));
 
     enum {
         FIVE,
