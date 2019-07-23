@@ -108,6 +108,12 @@ impl Generator {
         }
     }
 
+    fn get_label_num(&mut self) -> u32 {
+        let label_num = self.label_num;
+        self.label_num += 1;
+        label_num
+    }
+
     fn push(&mut self, reg: &'static str) {
         add_mnemonic!(self, "push {}", reg);
         self.stack_size += 8;
@@ -356,22 +362,22 @@ impl Generator {
             Infix::Mul => add_mnemonic!(self, "mulss xmm0, xmm1"),
             Infix::Div => add_mnemonic!(self, "divss xmm0, xmm1"),
             Infix::LessThan => {
-                label_num = Some(self.label_num);
+                label_num = Some(self.get_label_num());
                 add_mnemonic!(self, "comiss xmm1, xmm0");
                 add_mnemonic!(self, "jbe .Lelse{}", label_num.unwrap());
             },
             Infix::LessThanOrEqual => {
-                label_num = Some(self.label_num);
+                label_num = Some(self.get_label_num());
                 add_mnemonic!(self, "comiss xmm1, xmm0");
                 add_mnemonic!(self, "jb .Lelse{}", label_num.unwrap());
             },
             Infix::Equal => {
-                label_num = Some(self.label_num);
+                label_num = Some(self.get_label_num());
                 add_mnemonic!(self, "ucomiss xmm0, xmm1");
                 add_mnemonic!(self, "jne .Lelse{}", label_num.unwrap());
             },
             Infix::NotEqual => {
-                label_num = Some(self.label_num);
+                label_num = Some(self.get_label_num());
                 add_mnemonic!(self, "ucomiss xmm0, xmm1");
                 add_mnemonic!(self, "je .Lelse{}", label_num.unwrap());
             },
@@ -379,8 +385,7 @@ impl Generator {
         };
 
         if let Some(label_num) = label_num {
-            self.label_num += 1;
-            add_mnemonic!(self, "movss xmm0, .Lfone");
+            add_mnemonic!(self, "movss xmm0, .Lfone[rip]");
             add_mnemonic!(self, "jmp .Lend{}", label_num);
             add_label!(self, ".Lelse", label_num);
             add_mnemonic!(self, "pxor xmm0, xmm0");
@@ -610,8 +615,7 @@ impl Generator {
         self.gen_expr(cond);
         self.pop("rax");
         add_mnemonic!(self, "cmp rax, 0");
-        self.label_num += 1;
-        let label_num = self.label_num;
+        let label_num = self.get_label_num();
 
         // else 節がある場合
         if let Some(else_stmt) = else_stmt {
@@ -629,8 +633,7 @@ impl Generator {
     }
 
     fn gen_while_stmt(&mut self, expr: Expr, stmt: Stmt) {
-        self.label_num += 1;
-        let label_num = self.label_num;
+        let label_num = self.get_label_num();
 
         add_label!(self, ".Lbegin", label_num);
         add_label!(self, ".Lcontinue", label_num);
@@ -654,8 +657,7 @@ impl Generator {
     }
 
     fn gen_for_stmt(&mut self, init: Option<Box<Stmt>>, cond: Option<Expr>, loop_expr: Option<Expr>, stmt: Stmt) {
-        self.label_num += 1;
-        let label_num = self.label_num;
+        let label_num = self.get_label_num();
 
         // 初期化式
         if let Some(init) = init {
@@ -709,8 +711,7 @@ impl Generator {
     }
 
     fn gen_switch_stmt(&mut self, expr: Expr, cases: Vec<Expr>, stmt: Stmt, has_default: bool) {
-        self.label_num += 1;
-        let label_num = self.label_num;
+        let label_num = self.get_label_num();
 
         self.gen_expr(expr);
         self.pop("rax");
@@ -718,13 +719,13 @@ impl Generator {
         // caseにジャンプする処理
         let mut case_labels = Vec::new();
         for case in cases {
-            self.label_num += 1;
-            case_labels.push(self.label_num);
+            let label_num = self.get_label_num();
+            case_labels.push(label_num);
 
             self.gen_expr(case);
             self.pop("rbx");
             add_mnemonic!(self, "cmp rax, rbx");
-            add_mnemonic!(self, "je .Lcase{}", self.label_num);
+            add_mnemonic!(self, "je .Lcase{}", label_num);
         }
         self.case_labels_iter = Box::new(case_labels.into_iter());
 
