@@ -596,6 +596,24 @@ impl Generator {
         };
     }
 
+    fn gen_cmp(&mut self, cond: Expr) {
+        let ty = cond.ty();
+
+        self.gen_expr(cond);
+
+        match ty {
+            Type::Float => {
+                self.pop_and_convert("xmm0", &Type::Float, &ty);
+                add_mnemonic!(self, "movss xmm1, .Lfzero[rip]");
+                add_mnemonic!(self, "ucomiss xmm0, xmm1");
+            },
+            _ => {
+                self.pop("rax");
+                add_mnemonic!(self, "cmp rax, 0");
+            }
+        };
+    }
+
     fn gen_expr_stmt(&mut self, expr: Expr) {
         self.gen_expr(expr);
         add_mnemonic!(self, "add rsp, 8");
@@ -612,10 +630,9 @@ impl Generator {
     }
 
     fn gen_if_stmt(&mut self, cond: Expr, if_stmt: Stmt, else_stmt: Option<Box<Stmt>>) {
-        self.gen_expr(cond);
-        self.pop("rax");
-        add_mnemonic!(self, "cmp rax, 0");
         let label_num = self.get_label_num();
+
+        self.gen_cmp(cond);
 
         // else 節がある場合
         if let Some(else_stmt) = else_stmt {
@@ -638,10 +655,7 @@ impl Generator {
         add_label!(self, ".Lbegin", label_num);
         add_label!(self, ".Lcontinue", label_num);
 
-        // 条件式
-        self.gen_expr(expr);
-        self.pop("rax");
-        add_mnemonic!(self, "cmp rax, 0");
+        self.gen_cmp(expr);
         add_mnemonic!(self, "je .Lend{}", label_num);
 
         // 文
@@ -668,9 +682,7 @@ impl Generator {
 
         // 条件式
         if let Some(cond) = cond {
-            self.gen_expr(cond);
-            self.pop("rax");
-            add_mnemonic!(self, "cmp rax, 0");
+            self.gen_cmp(cond);
             add_mnemonic!(self, "je .Lend{}", label_num);
         }
 
@@ -989,6 +1001,8 @@ impl Generator {
         self.code.push_str(".data\n");
         add_label!(self, ".Lfone");
         add_mnemonic!(self, ".long 1065353216");
+        add_label!(self, ".Lfzero");
+        add_mnemonic!(self, ".long 0");
         for (i, float_num) in program.float_list.into_iter().enumerate() {
             add_label!(self, ".Lfloat", i);
             add_mnemonic!(self, ".long {}", float_num.to_bits());
