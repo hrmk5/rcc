@@ -267,6 +267,12 @@ int main() {
     expect_f("2.5 + 2.5 == 5.0", 1, 2.5 + 2.5 == 5.0);
     expect_f("3.513 != 3.513", 0, 3.513 != 3.513);
 
+    float float5 = 7.3;
+    expect_f("pre-increment of float type", 7.3, float5++);
+    expect_f("post-increment of float type", 9.3, ++float5);
+    expect_f("pre-decrement of float type", 9.3, float5--);
+    expect_f("post-decrement of float type", 7.3, --float5);
+
     enum {
         FIVE,
         SIX = 10,

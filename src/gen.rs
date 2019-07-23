@@ -550,23 +550,40 @@ impl Generator {
     }
 
     fn gen_inc_or_dec(&mut self, expr: Expr, is_post: bool, is_inc: bool) {
-        let opcode = if is_inc { "inc" } else { "dec" };
         let ty = expr.ty();
 
         self.gen_lvalue(expr);
         self.pop("rax");
 
-        self.gen_load("rbx", "rax", &ty);
+        if let Type::Float = ty {
+            let opcode = if is_inc { "addss" } else { "subss" };
 
-        if is_post {
-            self.push("rbx");
-            add_mnemonic!(self, "{} rbx", opcode);
+            self.gen_load("xmm0", "rax", &ty);
+
+            if is_post {
+                self.push_xmm("xmm0");
+                add_mnemonic!(self, "{} xmm0, .Lfone[rip]", opcode);
+            } else {
+                add_mnemonic!(self, "{} xmm0, .Lfone[rip]", opcode);
+                self.push_xmm("xmm0");
+            }
+
+            self.gen_save("rax", "xmm0", &ty);
         } else {
-            add_mnemonic!(self, "{} rbx", opcode);
-            self.push("rbx");
-        }
+            let opcode = if is_inc { "inc" } else { "dec" };
 
-        self.gen_save("rax", "rbx", &ty);
+            self.gen_load("rbx", "rax", &ty);
+
+            if is_post {
+                self.push("rbx");
+                add_mnemonic!(self, "{} rbx", opcode);
+            } else {
+                add_mnemonic!(self, "{} rbx", opcode);
+                self.push("rbx");
+            }
+
+            self.gen_save("rax", "rbx", &ty);
+        }
     }
 
     fn gen_expr(&mut self, expr: Expr) {
