@@ -132,9 +132,15 @@ impl Generator {
         self.stack_size -= 8;
     }
 
-    fn push_xmm(&mut self, reg: &'static str) {
+    fn push_xmm(&mut self, reg: &'static str, ty: &Type) {
         add_mnemonic!(self, "sub rsp, 8");
-        add_mnemonic!(self, "movss [rsp], {}", reg);
+
+        match ty {
+            Type::Float => add_mnemonic!(self, "movss [rsp], {}", reg),
+            Type::Double => add_mnemonic!(self, "movsd [rsp], {}", reg),
+            _ => panic!(),
+        };
+
         self.stack_size += 8;
     }
 
@@ -224,6 +230,31 @@ impl Generator {
                     add_mnemonic!(self, "cvtsi2ss {}, {} [{}]", dst, size_str, src);
                 }
             },
+            // double <- double
+            (Type::Double, Type::Double) => {
+                add_mnemonic!(self, "movsd {}, {} [{}]", dst, size_str, src);
+            },
+            // integer <- double
+            (Type::Double, dst_ty) if dst_ty.is_integer() => {
+                add_mnemonic!(self, "cvttsd2si {}, {} [{}]", dst, size_str, src);
+            },
+            // double <- integer
+            (src_ty, Type::Double) if src_ty.is_integer() => {
+                if src_ty.get_size() < 4 {
+                    add_mnemonic!(self, "movsx eax, {} [{}]", size_str, src);
+                    add_mnemonic!(self, "cvtsi2sd {}, eax", dst);
+                } else {
+                    add_mnemonic!(self, "cvtsi2sd {}, {} [{}]", dst, size_str, src);
+                }
+            },
+            // float <- double
+            (Type::Double, Type::Float) => {
+                add_mnemonic!(self, "cvtsd2ss {}, {} [{}]", dst, size_str, src);
+            },
+            // double <- float
+            (Type::Float, Type::Double) => {
+                add_mnemonic!(self, "cvtss2sd {}, {} [{}]", dst, size_str, src);
+            },
             // integer <- integer
             _ => self.gen_load(dst, src, dst_ty),
         };
@@ -231,43 +262,55 @@ impl Generator {
 
     
     fn gen_load(&mut self, dst: &'static str, src: &'static str, ty: &Type) {
-        if let Type::Float = ty {
-            add_mnemonic!(self, "movss {}, [{}]", dst, src);
-        } else {
-            let size = match ty {
-                // Return address size
-                Type::Array(_, _) => 8,
-                ty => ty.get_size(),
-            };
+        match ty {
+            Type::Float => {
+                add_mnemonic!(self, "movss {}, [{}]", dst, src);
+            },
+            Type::Double => {
+                add_mnemonic!(self, "movsd {}, [{}]", dst, src);
+            },
+            ty => {
+                let size = match ty {
+                    // Return address size
+                    Type::Array(_, _) => 8,
+                    ty => ty.get_size(),
+                };
 
-            let size_str = self.get_size_str(size).unwrap();
-            let register = self.get_size_register(if size < 4 { 4 } else { size }, dst).unwrap();
-            let mov = match size {
-                1 | 2 => "movsx",
-                _ => "mov",
-            };
+                let size_str = self.get_size_str(size).unwrap();
+                let register = self.get_size_register(if size < 4 { 4 } else { size }, dst).unwrap();
+                let mov = match size {
+                    1 | 2 => "movsx",
+                    _ => "mov",
+                };
 
-            match ty {
-                // Return an address instead of accessing memory if dst type is array
-                Type::Array(_, _) => {},
-                _ => {
-                    add_mnemonic!(self, "{} {}, {} [{}]", mov, register, size_str, src);
-                },
-            };
+                match ty {
+                    // Return an address instead of accessing memory if dst type is array
+                    Type::Array(_, _) => {},
+                    _ => {
+                        add_mnemonic!(self, "{} {}, {} [{}]", mov, register, size_str, src);
+                    },
+                };
+            }
         }
     }
 
     fn gen_save(&mut self, dst: &str, src: &'static str, dst_ty: &Type) {
-        if let Type::Float = dst_ty {
-            add_mnemonic!(self, "movss [{}], {}", dst, src);
-        } else {
-            let size = match dst_ty {
-                Type::Array(_, _) => 8,
-                ty => ty.get_size(),
-            };
+        match dst_ty {
+            Type::Float => {
+                add_mnemonic!(self, "movss [{}], {}", dst, src);
+            },
+            Type::Double => {
+                add_mnemonic!(self, "movsd [{}], {}", dst, src);
+            },
+            _ => {
+                let size = match dst_ty {
+                    Type::Array(_, _) => 8,
+                    ty => ty.get_size(),
+                };
 
-            let src = self.get_size_register(size, src).unwrap();
-            add_mnemonic!(self, "mov [{}], {}", dst, src);
+                let src = self.get_size_register(size, src).unwrap();
+                add_mnemonic!(self, "mov [{}], {}", dst, src);
+            },
         }
     }
 
@@ -277,9 +320,9 @@ impl Generator {
         self.gen_lvalue(expr);
         self.pop("rax");
 
-        if let Type::Float = &ty {
+        if ty.is_floating_number() {
             self.gen_load("xmm0", "rax", &ty);
-            self.push_xmm("xmm0");
+            self.push_xmm("xmm0", &ty);
         } else {
             self.gen_load("rax", "rax", &ty);
             self.push("rax");
@@ -307,7 +350,7 @@ impl Generator {
         self.gen_lvalue(lhs);
         self.gen_expr(rhs);
         
-        let register = if let Type::Float = lty {
+        let register = if lty.is_floating_number() {
             self.pop_and_convert("xmm0", &lty, &rty);
             "xmm0"
         } else {
@@ -318,8 +361,8 @@ impl Generator {
         self.pop("rax");
         self.gen_save("rax", register, &lty);
         
-        if let Type::Float = lty {
-            self.push_xmm("xmm0");
+        if lty.is_floating_number() {
+            self.push_xmm("xmm0", &lty);
         } else {
             self.push("rdx");
         }
@@ -372,7 +415,7 @@ impl Generator {
             add_label!(self, ".Lend", label_num);
         }
 
-        self.push_xmm("xmm0");
+        self.push_xmm("xmm0", &Type::Float);
     }
 
     fn gen_infix_integer(&mut self, kind: Infix, lhs: Expr, rhs: Expr) {
@@ -478,7 +521,7 @@ impl Generator {
         for (arg_expr, param_ty) in args.clone().into_iter().zip(params.iter()) {
             // Determine a register
             let reg = match param_ty {
-                Type::Float => {
+                ty if ty.is_floating_number() => {
                     xmm_arg_reg += 1;
                     XMM_ARG_REGISTERS[xmm_arg_reg - 1]
                 },
@@ -496,19 +539,7 @@ impl Generator {
 
         // Store arguments into register
         for ((ty, reg), param_ty) in types.into_iter().zip(params.into_iter()).rev() {
-            if name == "printf" {
-                // TODO: Remove later
-                // Convert float type argument to double type because doesn't support variable argument
-                if let Type::Float = ty {
-                    add_mnemonic!(self, "cvtss2sd {}, [rsp]", reg);
-                    add_mnemonic!(self, "add rsp, 8");
-                    self.stack_size -= 8;
-                } else {
-                    self.pop_and_convert(reg, &param_ty, &ty);
-                }
-            } else {
-                self.pop_and_convert(reg, &param_ty, &ty);
-            }
+            self.pop_and_convert(reg, &param_ty, &ty);
         }
 
         add_mnemonic!(self, "mov al, {}", xmm_arg_reg);
@@ -526,7 +557,7 @@ impl Generator {
 
         // Push the return value
         if return_type.is_floating_number() {
-            self.push_xmm("xmm0");
+            self.push_xmm("xmm0", &return_type);
         } else {
             self.push("rax");
         }
@@ -551,11 +582,11 @@ impl Generator {
             self.gen_load("xmm0", "rax", &ty);
 
             if is_post {
-                self.push_xmm("xmm0");
+                self.push_xmm("xmm0", &ty);
                 add_mnemonic!(self, "{} xmm0, .Lfone[rip]", opcode);
             } else {
                 add_mnemonic!(self, "{} xmm0, .Lfone[rip]", opcode);
-                self.push_xmm("xmm0");
+                self.push_xmm("xmm0", &ty);
             }
 
             self.gen_save("rax", "xmm0", &ty);
@@ -588,11 +619,11 @@ impl Generator {
             },
             ExprKind::Literal(Literal::Float(num)) => {
                 add_mnemonic!(self, "movss xmm0, .Lfloat{}[rip]", num);
-                self.push_xmm("xmm0");
+                self.push_xmm("xmm0", &Type::Float);
             },
             ExprKind::Literal(Literal::Double(num)) => {
                 add_mnemonic!(self, "movsd xmm0, .Ldouble{}[rip]", num);
-                self.push_xmm("xmm0");
+                self.push_xmm("xmm0", &Type::Double);
             },
             ExprKind::Increment(expr, is_post) => self.gen_inc_or_dec(*expr, is_post, true),
             ExprKind::Decrement(expr, is_post) => self.gen_inc_or_dec(*expr, is_post, false),
@@ -850,7 +881,7 @@ impl Generator {
                 let src_ty = expr.ty();
                 self.gen_expr(expr);
 
-                let reg = if let Type::Float = dst_ty {
+                let reg = if dst_ty.is_floating_number() {
                     self.pop_and_convert("xmm0", dst_ty, &src_ty);
                     "xmm0"
                 } else {
