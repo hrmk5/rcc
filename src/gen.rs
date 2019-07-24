@@ -261,7 +261,7 @@ impl Generator {
     }
 
     
-    fn gen_load(&mut self, dst: &'static str, src: &'static str, ty: &Type) {
+    fn gen_load(&mut self, dst: &'static str, src: &str, ty: &Type) {
         match ty {
             Type::Float => {
                 add_mnemonic!(self, "movss {}, [{}]", dst, src);
@@ -343,28 +343,52 @@ impl Generator {
         };
     }
 
+    fn gen_copy_structure(&mut self, dst: &str, src: &str, members: Vec<(String, Variable)>) {
+        for (_, member) in members {
+            let reg = if member.ty.is_floating_number() {
+                "xmm0"
+            } else {
+                "rcx"
+            };
+
+            let dst = format!("{}+{}", dst, member.offset());
+            let src = format!("{}+{}", src, member.offset());
+            self.gen_load(reg, &src, &member.ty);
+            self.gen_save(&dst, reg, &member.ty);
+        }
+    }
+
     fn gen_assign(&mut self, lhs: Expr, rhs: Expr) {
         let lty = lhs.ty();
         let rty = rhs.ty();
 
-        self.gen_lvalue(lhs);
-        self.gen_expr(rhs);
-        
-        let register = if lty.is_floating_number() {
-            self.pop_and_convert("xmm0", &lty, &rty);
-            "xmm0"
+        if let (Type::Structure(members, _), Type::Structure(_, _)) = (lty.clone(), &rty) {
+            self.gen_lvalue(lhs);
+            self.gen_lvalue(rhs);
+            self.pop("rbx");
+            self.pop("rax");
+
+            self.gen_copy_structure("rax", "rbx", members);
         } else {
-            self.pop_and_convert("rdx", &lty, &rty);
-            "rdx"
-        };
-        
-        self.pop("rax");
-        self.gen_save("rax", register, &lty);
-        
-        if lty.is_floating_number() {
-            self.push_xmm("xmm0", &lty);
-        } else {
-            self.push("rdx");
+            self.gen_lvalue(lhs);
+            self.gen_expr(rhs);
+            
+            let register = if lty.is_floating_number() {
+                self.pop_and_convert("xmm0", &lty, &rty);
+                "xmm0"
+            } else {
+                self.pop_and_convert("rdx", &lty, &rty);
+                "rdx"
+            };
+            
+            self.pop("rax");
+            self.gen_save("rax", register, &lty);
+            
+            if lty.is_floating_number() {
+                self.push_xmm("xmm0", &lty);
+            } else {
+                self.push("rdx");
+            }
         }
     }
 

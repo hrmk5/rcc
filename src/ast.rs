@@ -103,15 +103,19 @@ impl Type {
         let lty = ty;
         let rty = self;
 
-        // TODO: Structure
         match lty {
-            Type::Void | Type::Array(_, _) | Type::Structure(_, _) => false,
+            Type::Void | Type::Array(_, _) => false,
             Type::Pointer(_) => match rty {
                 Type::Array(_, _) => true,
                 rty => rty.is_number(),
             },
             Type::Const(lty) => rty.can_assign_to(lty),
             lty if lty.is_number() => rty.is_number(),
+            // TODO: Add check
+            Type::Structure(_, _) => match rty {
+                Type::Structure(_, _) => true,
+                _ => false,
+            },
             _ => panic!(),
         }
     }
