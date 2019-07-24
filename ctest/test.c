@@ -23,6 +23,10 @@ float return_float(float a) {
     return a;
 }
 
+double return_double(double a) {
+    return a;
+}
+
 int global_var;
 int global_a = 10;
 int *global_b = &global_a;
@@ -255,29 +259,51 @@ int main() {
     expect("long", 214109, h);
 
     float float1 = 51.3;
-    expect_f("float", 51.3, float1);
+    expect_f("float", 51.3F, float1);
     int float2 = 31.99;
-    expect("int <- float", 31, float2);
+    expect("int <- float", 31.0f, float2);
     char float3 = 101.53;
-    expect("char <- float", 101, float3);
+    expect("char <- float", 101.0f, float3);
     float float4 = 61;
-    expect_f("float <- int", 61, float4);
+    expect_f("float <- int", 61.0f, float4);
+
+    double double1 = 34.9;
+    expect_d("double", 34.9, double1);
+    int double2 = 1222.2412419;
+    expect("int <- double", 1222, double2);
+    char double3 = 21.958;
+    expect("char <- double", 21, double3);
+    double double4 = 391204;
+    expect_d("double <- int", 391204.0, double4);
+
+    double double6 = 3.4f;
+    expect_d("double <- float", -1, (double6 == 3.4) - (double6 == 3.4f));
+    float float6 = 5.8;
+    expect_f("float <- double", 5.8f, float6);
+
     expect_f("2.5 + 2", 4.5, 2.5 + 2);
     expect_f("5.5 - 0.5", 5, 5.5 - 0.5);
     expect_f("14.6 + -4.6", 10.0, 14.6 + -4.6);
     expect_f("35.5 > 51.535", 0, 35.5 > 51.535);
     expect_f("5.0 >= 5", 1, 5.0 >= 5);
-    expect_f("3.5 < 10034.5", 1, 3.5 < 10034.5);
-    expect_f("2.5 + 2.5 == 5.0", 1, 2.5 + 2.5 == 5.0);
+    expect_f("3.5f < 10034.5f", 1, 3.5f < 10034.5f);
+    expect_f("2.5 + 2.5f == 5.0", 1, 2.5 + 2.5f == 5.0);
     expect_f("3.513 != 3.513", 0, 3.513 != 3.513);
+    expect_f("3.5 != 3.5f", 0, 3.5 != 3.5f);
 
     float float5 = 7.3;
     expect_f("pre-increment of float type", 7.3, float5++);
     expect_f("post-increment of float type", 9.3, ++float5);
     expect_f("pre-decrement of float type", 9.3, float5--);
     expect_f("post-decrement of float type", 7.3, --float5);
+    double double5 = 9.3;
+    expect_d("pre-increment of double type", 9.3, double5++);
+    expect_d("post-increment of double type", 11.3, ++double5);
+    expect_d("pre-decrement of double type", 11.3, double5--);
+    expect_d("post-decrement of double type", 9.3, --double5);
 
     expect_f("function to return float type", 9.32, return_float(9.32));
+    expect_d("function to return double type", 13.5, return_double(13.5));
 
     enum {
         FIVE,

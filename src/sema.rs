@@ -112,7 +112,9 @@ impl Analyzer {
 
                 if !self.check_infix(&infix, &lhs, &rhs, &expr.span) {
                     None
-                } else if lty.is_floating_number() || rty.is_floating_number() {
+                } else if let (Type::Double, _) | (_, Type::Double) = (&lty, &rty) {
+                    Some(Type::Double)
+                } else if let (Type::Float, _) | (_, Type::Float) = (&lty, &rty) {
                     Some(Type::Float)
                 } else {
                     Some(match infix {

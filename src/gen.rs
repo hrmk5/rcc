@@ -368,6 +368,48 @@ impl Generator {
         }
     }
 
+    fn gen_infix_double(&mut self, kind: Infix, lty: &Type, rty: &Type) {
+        self.pop_and_convert("xmm1", &Type::Double, rty);
+        self.pop_and_convert("xmm0", &Type::Double, lty);
+
+        let mut label_num = None;
+        match kind {
+            Infix::Add => add_mnemonic!(self, "addsd xmm0, xmm1"),
+            Infix::Sub => add_mnemonic!(self, "subsd xmm0, xmm1"),
+            Infix::Mul => add_mnemonic!(self, "mulsd xmm0, xmm1"),
+            Infix::Div => add_mnemonic!(self, "divsd xmm0, xmm1"),
+            Infix::LessThan => {
+                label_num = Some(self.get_label_num());
+                add_mnemonic!(self, "comisd xmm1, xmm0");
+                add_mnemonic!(self, "jbe .Lelse{}", label_num.unwrap());
+            },
+            Infix::LessThanOrEqual => {
+                label_num = Some(self.get_label_num());
+                add_mnemonic!(self, "comisd xmm1, xmm0");
+                add_mnemonic!(self, "jb .Lelse{}", label_num.unwrap());
+            },
+            Infix::Equal => {
+                label_num = Some(self.get_label_num());
+                add_mnemonic!(self, "ucomisd xmm0, xmm1");
+                add_mnemonic!(self, "jne .Lelse{}", label_num.unwrap());
+            },
+            Infix::NotEqual => {
+                label_num = Some(self.get_label_num());
+                add_mnemonic!(self, "ucomisd xmm0, xmm1");
+                add_mnemonic!(self, "je .Lelse{}", label_num.unwrap());
+            },
+            _ => panic!(),
+        };
+
+        if let Some(label_num) = label_num {
+            add_mnemonic!(self, "movsd xmm0, .Ldone[rip]");
+            add_mnemonic!(self, "jmp .Lend{}", label_num);
+            add_label!(self, ".Lelse", label_num);
+            add_mnemonic!(self, "pxor xmm0, xmm0");
+            add_label!(self, ".Lend", label_num);
+        }
+    }
+
     fn gen_infix_float(&mut self, kind: Infix, lhs: Expr, rhs: Expr) {
         let lty = lhs.ty();
         let rty = rhs.ty();
@@ -375,47 +417,53 @@ impl Generator {
         self.gen_expr(lhs);
         self.gen_expr(rhs);
 
-        self.pop_and_convert("xmm1", &Type::Float, &rty);
-        self.pop_and_convert("xmm0", &Type::Float, &lty);
+        let ty = if let (Type::Double, _) | (_, Type::Double) = (&lty, &rty) {
+            self.gen_infix_double(kind, &lty, &rty);
+            Type::Double
+        } else {
+            self.pop_and_convert("xmm1", &Type::Float, &rty);
+            self.pop_and_convert("xmm0", &Type::Float, &lty);
 
-        let mut label_num = None;
-        match kind {
-            Infix::Add => add_mnemonic!(self, "addss xmm0, xmm1"),
-            Infix::Sub => add_mnemonic!(self, "subss xmm0, xmm1"),
-            Infix::Mul => add_mnemonic!(self, "mulss xmm0, xmm1"),
-            Infix::Div => add_mnemonic!(self, "divss xmm0, xmm1"),
-            Infix::LessThan => {
-                label_num = Some(self.get_label_num());
-                add_mnemonic!(self, "comiss xmm1, xmm0");
-                add_mnemonic!(self, "jbe .Lelse{}", label_num.unwrap());
-            },
-            Infix::LessThanOrEqual => {
-                label_num = Some(self.get_label_num());
-                add_mnemonic!(self, "comiss xmm1, xmm0");
-                add_mnemonic!(self, "jb .Lelse{}", label_num.unwrap());
-            },
-            Infix::Equal => {
-                label_num = Some(self.get_label_num());
-                add_mnemonic!(self, "ucomiss xmm0, xmm1");
-                add_mnemonic!(self, "jne .Lelse{}", label_num.unwrap());
-            },
-            Infix::NotEqual => {
-                label_num = Some(self.get_label_num());
-                add_mnemonic!(self, "ucomiss xmm0, xmm1");
-                add_mnemonic!(self, "je .Lelse{}", label_num.unwrap());
-            },
-            _ => panic!(),
+            let mut label_num = None;
+            match kind {
+                Infix::Add => add_mnemonic!(self, "addss xmm0, xmm1"),
+                Infix::Sub => add_mnemonic!(self, "subss xmm0, xmm1"),
+                Infix::Mul => add_mnemonic!(self, "mulss xmm0, xmm1"),
+                Infix::Div => add_mnemonic!(self, "divss xmm0, xmm1"),
+                Infix::LessThan => {
+                    label_num = Some(self.get_label_num());
+                    add_mnemonic!(self, "comiss xmm1, xmm0");
+                    add_mnemonic!(self, "jbe .Lelse{}", label_num.unwrap());
+                },
+                Infix::LessThanOrEqual => {
+                    label_num = Some(self.get_label_num());
+                    add_mnemonic!(self, "comiss xmm1, xmm0");
+                    add_mnemonic!(self, "jb .Lelse{}", label_num.unwrap());
+                },
+                Infix::Equal => {
+                    label_num = Some(self.get_label_num());
+                    add_mnemonic!(self, "ucomiss xmm0, xmm1");
+                    add_mnemonic!(self, "jne .Lelse{}", label_num.unwrap());
+                },
+                Infix::NotEqual => {
+                    label_num = Some(self.get_label_num());
+                    add_mnemonic!(self, "ucomiss xmm0, xmm1");
+                    add_mnemonic!(self, "je .Lelse{}", label_num.unwrap());
+                },
+                _ => panic!(),
+            };
+
+            if let Some(label_num) = label_num {
+                add_mnemonic!(self, "movss xmm0, .Lfone[rip]");
+                add_mnemonic!(self, "jmp .Lend{}", label_num);
+                add_label!(self, ".Lelse", label_num);
+                add_mnemonic!(self, "pxor xmm0, xmm0");
+                add_label!(self, ".Lend", label_num);
+            }
+            Type::Float
         };
 
-        if let Some(label_num) = label_num {
-            add_mnemonic!(self, "movss xmm0, .Lfone[rip]");
-            add_mnemonic!(self, "jmp .Lend{}", label_num);
-            add_label!(self, ".Lelse", label_num);
-            add_mnemonic!(self, "pxor xmm0, xmm0");
-            add_label!(self, ".Lend", label_num);
-        }
-
-        self.push_xmm("xmm0", &Type::Float);
+        self.push_xmm("xmm0", &ty);
     }
 
     fn gen_infix_integer(&mut self, kind: Infix, lhs: Expr, rhs: Expr) {
@@ -576,16 +624,24 @@ impl Generator {
         self.gen_lvalue(expr);
         self.pop("rax");
 
-        if let Type::Float = ty {
-            let opcode = if is_inc { "addss" } else { "subss" };
+        if ty.is_floating_number() {
+            let (opcode, one) = match &ty {
+                Type::Float => {
+                    (if is_inc { "addss" } else { "subss" }, ".Lfone[rip]")
+                },
+                Type::Double => {
+                    (if is_inc { "addsd" } else { "subsd" }, ".Ldone[rip]")
+                },
+                _ => panic!(),
+            };
 
             self.gen_load("xmm0", "rax", &ty);
 
             if is_post {
                 self.push_xmm("xmm0", &ty);
-                add_mnemonic!(self, "{} xmm0, .Lfone[rip]", opcode);
+                add_mnemonic!(self, "{} xmm0, {}", opcode, one);
             } else {
-                add_mnemonic!(self, "{} xmm0, .Lfone[rip]", opcode);
+                add_mnemonic!(self, "{} xmm0, {}", opcode, one);
                 self.push_xmm("xmm0", &ty);
             }
 
@@ -648,6 +704,11 @@ impl Generator {
                 self.pop_and_convert("xmm0", &Type::Float, &ty);
                 add_mnemonic!(self, "movss xmm1, .Lfzero[rip]");
                 add_mnemonic!(self, "ucomiss xmm0, xmm1");
+            },
+            Type::Double => {
+                self.pop_and_convert("xmm0", &Type::Double, &ty);
+                add_mnemonic!(self, "pxor xmm1, xmm1");
+                add_mnemonic!(self, "ucomisd xmm0, xmm1");
             },
             _ => {
                 self.pop("rax");
@@ -924,8 +985,8 @@ impl Generator {
                 for arg in args {
                     let dst = format!("rbp-{}", arg.offset());
                     match arg.ty {
-                        Type::Float => {
-                            self.gen_save(&dst, XMM_ARG_REGISTERS[xmm_reg], &Type::Float);
+                        ty if ty.is_floating_number() => {
+                            self.gen_save(&dst, XMM_ARG_REGISTERS[xmm_reg], &ty);
                             xmm_reg += 1;
                         },
                         ty => {
@@ -1090,6 +1151,9 @@ impl Generator {
         add_mnemonic!(self, ".long 1065353216");
         add_label!(self, ".Lfzero");
         add_mnemonic!(self, ".long 0");
+        add_label!(self, ".Ldone");
+        add_mnemonic!(self, ".long 0");
+        add_mnemonic!(self, ".long 1072693248");
 
         // Floating point number literals
         for (i, float_num) in program.float_list.into_iter().enumerate() {

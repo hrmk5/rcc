@@ -7,3 +7,4 @@ extern int failed;
 
 int expect(char *name, int expected, int actual);
 void expect_f(char *name, float expected, float actual);
+void expect_d(char *name, double expected, double actual);
