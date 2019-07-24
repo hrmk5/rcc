@@ -17,6 +17,7 @@ pub enum Type {
     Short,
     Long,
     Float,
+    Double,
     Void,
     Pointer(Box<Type>),
     Array(Box<Type>, usize),
@@ -50,6 +51,7 @@ impl Type {
             Type::Short => 2,
             Type::Long => 8,
             Type::Float => 4,
+            Type::Double => 8,
             Type::Void => 8,
             Type::Pointer(_) => 8,
             Type::Array(ty, size) => ty.get_size() * size,
@@ -92,7 +94,7 @@ impl Type {
 
     pub fn is_floating_number(&self) -> bool {
         match self {
-            Type::Float => true,
+            Type::Float | Type::Double => true,
             _ => false,
         }
     }
@@ -165,6 +167,7 @@ pub enum Infix {
 pub enum Literal {
     Number(i32),
     Float(usize),
+    Double(usize),
     String(usize),
 }
 
@@ -269,4 +272,5 @@ pub struct Program {
     pub global_variables: Vec<Variable>,
     pub string_list: Vec<String>,
     pub float_list: Vec<f32>,
+    pub double_list: Vec<f64>,
 }

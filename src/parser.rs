@@ -21,6 +21,7 @@ pub struct Parser {
 
     string_list: Vec<String>,
     float_list: Vec<f32>,
+    double_list: Vec<f64>,
     tokens: Vec<Token>,
     pos: usize,
     stack_size: usize,
@@ -106,6 +107,7 @@ impl Parser {
             enums: HashMap::new(),
             string_list: Vec::new(),
             float_list: Vec::new(),
+            double_list: Vec::new(),
             stack_size: 0,
             start_token_stack: Vec::new(),
             cases: Vec::new(),
@@ -352,6 +354,7 @@ impl Parser {
             TokenKind::Short => Type::Short,
             TokenKind::Long => Type::Long,
             TokenKind::Float => Type::Float,
+            TokenKind::Double => Type::Double,
             TokenKind::Void => Type::Void,
             TokenKind::Struct => match self.parse_type_struct(is_global) {
                 Some(ty) => ty,
@@ -394,9 +397,14 @@ impl Parser {
         ExprKind::Literal(Literal::String(self.string_list.len() - 1))
     }
 
-    fn parse_float(&mut self, num: f64) -> ExprKind {
-        self.float_list.push(num as f32);
+    fn parse_float(&mut self, num: f32) -> ExprKind {
+        self.float_list.push(num);
         ExprKind::Literal(Literal::Float(self.float_list.len() - 1))
+    }
+
+    fn parse_double(&mut self, num: f64) -> ExprKind {
+        self.double_list.push(num);
+        ExprKind::Literal(Literal::Double(self.double_list.len() - 1))
     }
 
     fn parse_call(&mut self, ident: String) -> ExprKind {
@@ -472,6 +480,7 @@ impl Parser {
             },
             TokenKind::Number(num) => new_expr!(self, ExprKind::Literal(Literal::Number(num))),
             TokenKind::FloatNum(num) => new_expr!(self, self.parse_float(num)),
+            TokenKind::DoubleNum(num) => new_expr!(self, self.parse_double(num)),
             TokenKind::String(s) => new_expr!(self, self.parse_string(s)),
             TokenKind::Ident(ident) => new_expr!(self, self.parse_var_or_call(ident)),
             _ => new_expr!(self, self.invalid_expr("数値でも開きカッコでもないトークンです", 0)),
@@ -1187,6 +1196,7 @@ impl Parser {
                 global_variables: self.global_variables.clone().into_iter().map(|(_, v)| v).collect(),
                 string_list: self.string_list.clone(),
                 float_list: self.float_list,
+                double_list: self.double_list,
             })
         } else {
             Err(self.errors)

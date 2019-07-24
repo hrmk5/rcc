@@ -102,7 +102,13 @@ impl Tokenizer {
 
         if let Some(pos) = decimal_point_pos {
             let pos = (self.col - start_col) as u32 - pos;
-            self.add_token(TokenKind::FloatNum(num as f64 / 10u32.pow(pos - 1) as f64), start_col, self.col);
+
+            if self.ch == 'f' || self.ch == 'F' {
+                self.add_token(TokenKind::FloatNum(num as f32 / 10u32.pow(pos - 1) as f32), start_col, self.col);
+                self.next();
+            } else {
+                self.add_token(TokenKind::DoubleNum(num as f64 / 10u32.pow(pos - 1) as f64), start_col, self.col);
+            }
         } else {
             self.add_token(TokenKind::Number(num as i32), start_col, self.col);
         }
@@ -144,6 +150,7 @@ impl Tokenizer {
             "default" => TokenKind::Default,
             "const" => TokenKind::Const,
             "float" => TokenKind::Float,
+            "double" => TokenKind::Double,
             _ => TokenKind::Ident(s),
         }, start_col, self.col);
     }

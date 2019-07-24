@@ -81,6 +81,7 @@ impl Analyzer {
         expr.ty = match &mut expr.kind {
             ExprKind::Literal(Literal::Number(_)) => Some(Type::Int),
             ExprKind::Literal(Literal::Float(_)) => Some(Type::Float),
+            ExprKind::Literal(Literal::Double(_)) => Some(Type::Double),
             ExprKind::Literal(Literal::String(_)) => Some(Type::Pointer(Box::new(Type::Char))),
             ExprKind::Variable(var) => Some(var.ty.clone()),
             ExprKind::Dereference(expr) => match self.get_type(expr) {

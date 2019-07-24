@@ -590,6 +590,10 @@ impl Generator {
                 add_mnemonic!(self, "movss xmm0, .Lfloat{}[rip]", num);
                 self.push_xmm("xmm0");
             },
+            ExprKind::Literal(Literal::Double(num)) => {
+                add_mnemonic!(self, "movsd xmm0, .Ldouble{}[rip]", num);
+                self.push_xmm("xmm0");
+            },
             ExprKind::Increment(expr, is_post) => self.gen_inc_or_dec(*expr, is_post, true),
             ExprKind::Decrement(expr, is_post) => self.gen_inc_or_dec(*expr, is_post, false),
             ExprKind::Variable(_) | ExprKind::Dereference(_) | ExprKind::MemberAccess(_, _) => self.gen_var_or_deref(expr),
@@ -1026,6 +1030,17 @@ impl Generator {
         };
     }
 
+    pub fn gen_double_literal(&mut self, literals: Vec<f64>) {
+        for (i, num) in literals.into_iter().enumerate() {
+            let bits = num.to_bits();
+            let high = (bits & 0b1111111111111111111111111111111100000000000000000000000000000000) / 2u64.pow(32);
+            let low = bits & 0b0000000000000000000000000000000011111111111111111111111111111111;
+            add_label!(self, ".Ldouble", i);
+            add_mnemonic!(self, ".long {}", low);
+            add_mnemonic!(self, ".long {}", high);
+        }
+    }
+
     pub fn gen(&mut self, program: Program) {
         self.code.push_str(".intel_syntax noprefix\n");
         self.code.push_str(".global main\n");
@@ -1050,6 +1065,8 @@ impl Generator {
             add_label!(self, ".Lfloat", i);
             add_mnemonic!(self, ".long {}", float_num.to_bits());
         }
+
+        self.gen_double_literal(program.double_list);
 
         self.gen_global_var(&program.declarations);
 
