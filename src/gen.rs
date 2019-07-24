@@ -165,41 +165,21 @@ impl Generator {
         }
     }
 
-    fn gen_lvalue(&mut self, expr: Expr) -> Option<usize> {
+    fn gen_lvalue(&mut self, expr: Expr) {
         match expr.kind {
             ExprKind::Dereference(expr) => {
-                let ty = expr.ty();
                 self.gen_dereference(*expr);
                 self.push("rax");
-                Some(match ty {
-                    Type::Pointer(box Type::Array(_, _)) => 8,
-                    Type::Pointer(ty) => ty.get_size(),
-                    _ => panic!(),
-                })
             },
             ExprKind::Variable(variable) => {
-                // 変数のアドレスをプッシュする
                 match variable.location {
-                    Location::Local(offset) => {
-                        add_mnemonic!(self, "mov rax, rbp");
-                        add_mnemonic!(self, "sub rax, {}", offset);
-                        self.push("rax");
-                    },
-                    Location::Global(name) => {
-                        add_mnemonic!(self, "lea rax, {}[rip]", &name);
-                        self.push("rax");
-                    },
+                    Location::Local(offset) => add_mnemonic!(self, "lea rax, [rbp-{}]", offset),
+                    Location::Global(name) => add_mnemonic!(self, "lea rax, {}[rip]", &name),
                 };
 
-                // 変数のサイズを返す
-                // 配列の場合はポインタのサイズを返す
-                Some(match variable.ty {
-                    Type::Array(_, _) => 8,
-                    _ => variable.ty.get_size(),
-                })
+                self.push("rax");
             },
             ExprKind::MemberAccess(lhs, member) => {
-                // メンバを取得
                 let ty = lhs.ty();
                 let member = ty.find_member(&member);
 
@@ -207,17 +187,9 @@ impl Generator {
                 self.pop("rax");
                 add_mnemonic!(self, "lea rax, [rax+{}]", member.offset());
                 self.push("rax");
-
-                // 変数のサイズを返す
-                // 配列の場合はポインタのサイズを返す
-                Some(match &member.ty {
-                    Type::Array(_, _) => 8,
-                    ty => ty.get_size(),
-                })
             },
             _ => {
-                println!("代入の左辺値が変数ではありません");
-                None
+                panic!("Not lvalue");
             },
         }
     }
@@ -409,7 +381,7 @@ impl Generator {
                 (Type::Pointer(ty), Type::Int) | (Type::Array(ty, _), Type::Int) => {
                     self.gen_expr(lhs);
                     self.gen_expr(rhs);
-                    // rhsにポインタか配列の型のサイズを掛ける
+                    // rhs multiply by pointer or array type size
                     self.pop("rdi");
                     add_mnemonic!(self, "mov rax, {}", ty.get_size());
                     add_mnemonic!(self, "imul rdi");
@@ -417,7 +389,7 @@ impl Generator {
                 },
                 (Type::Int, Type::Pointer(ty)) | (Type::Int, Type::Array(ty, _)) => {
                     self.gen_expr(lhs);
-                    // lhsにポインタか配列の型のサイズを掛ける
+                    // lhs multiply by pointer or array type size
                     self.pop("rdi");
                     add_mnemonic!(self, "mov rax, {}", ty.get_size());
                     add_mnemonic!(self, "imul rdi");
@@ -504,6 +476,7 @@ impl Generator {
 
         let mut types: Vec<(Type, &'static str)> = Vec::new();
         for (arg_expr, param_ty) in args.clone().into_iter().zip(params.iter()) {
+            // Determine a register
             let reg = match param_ty {
                 Type::Float => {
                     xmm_arg_reg += 1;
@@ -516,12 +489,16 @@ impl Generator {
             };
 
             types.push((arg_expr.ty(), reg));
+
+            // Push the argument value
             self.gen_expr(arg_expr);
         }
 
+        // Store arguments into register
         for ((ty, reg), param_ty) in types.into_iter().zip(params.into_iter()).rev() {
             if name == "printf" {
                 // TODO: Remove later
+                // Convert float type argument to double type because doesn't support variable argument
                 if let Type::Float = ty {
                     add_mnemonic!(self, "cvtss2sd {}, [rsp]", reg);
                     add_mnemonic!(self, "add rsp, 8");
@@ -536,18 +513,18 @@ impl Generator {
 
         add_mnemonic!(self, "mov al, {}", xmm_arg_reg);
 
-        // Align stack
+        // Align the stack
         let padding = 16 - (self.stack_size - 8) % 16;
         if padding == 16 {
             add_mnemonic!(self, "call {}", name);
         } else {
             add_mnemonic!(self, "sub rsp, {}", padding);
             add_mnemonic!(self, "call {}", name);
-            // Revert stack
+            // Revert the stack
             add_mnemonic!(self, "add rsp, {}", padding);
         }
 
-        // Push return value
+        // Push the return value
         if return_type.is_floating_number() {
             self.push_xmm("xmm0");
         } else {
@@ -646,6 +623,8 @@ impl Generator {
 
     fn gen_expr_stmt(&mut self, expr: Expr) {
         self.gen_expr(expr);
+
+        // Have to pop because gen_expr always push a result
         add_mnemonic!(self, "add rsp, 8");
         self.stack_size -= 8;
     }
@@ -664,6 +643,8 @@ impl Generator {
         };
 
         self.pop_and_convert(reg, &return_type, &ty);
+
+        // Epilogue
         add_mnemonic!(self, "mov rsp, rbp");
         self.pop("rbp");
         add_mnemonic!(self, "ret");
@@ -677,14 +658,18 @@ impl Generator {
 
         self.gen_cmp(cond);
 
-        // else 節がある場合
         if let Some(else_stmt) = else_stmt {
             add_mnemonic!(self, "je .Lelse{}", label_num);
+
+            // Generate the statement in if
             self.gen_stmt(if_stmt);
             add_mnemonic!(self, "jmp .Lend{}", label_num);
+
+            // Generate the statement in else
             add_label!(self, ".Lelse", label_num);
             self.gen_stmt(*else_stmt);
         } else {
+            // Generate the statement in if
             add_mnemonic!(self, "je .Lend{}", label_num);
             self.gen_stmt(if_stmt);
         }
@@ -698,10 +683,11 @@ impl Generator {
         add_label!(self, ".Lbegin", label_num);
         add_label!(self, ".Lcontinue", label_num);
 
+        // Generate the condition
         self.gen_cmp(expr);
         add_mnemonic!(self, "je .Lend{}", label_num);
 
-        // 文
+        // Generate the statement
         self.break_label_stack.push(label_num);
         self.continue_label_stack.push(label_num);
         self.gen_stmt(stmt);
@@ -716,20 +702,20 @@ impl Generator {
     fn gen_for_stmt(&mut self, init: Option<Box<Stmt>>, cond: Option<Expr>, loop_expr: Option<Expr>, stmt: Stmt) {
         let label_num = self.get_label_num();
 
-        // 初期化式
+        // Generate the initialization
         if let Some(init) = init {
             self.gen_stmt(*init);
         }
 
         add_label!(self, ".Lbegin", label_num);
 
-        // 条件式
+        // Generate the condition
         if let Some(cond) = cond {
             self.gen_cmp(cond);
             add_mnemonic!(self, "je .Lend{}", label_num);
         }
 
-        // 文
+        // Generate the statement
         self.break_label_stack.push(label_num);
         self.continue_label_stack.push(label_num);
         self.gen_stmt(stmt);
@@ -738,6 +724,7 @@ impl Generator {
 
         add_label!(self, ".Lcontinue", label_num);
 
+        // Generate the loop expression
         if let Some(loop_expr) = loop_expr {
             self.gen_expr(loop_expr);
             self.pop("rax");
@@ -753,7 +740,6 @@ impl Generator {
             _ => panic!("ローカル変数ではありません"),
         };
 
-        // 初期化式
         if let Some(initializer) = initializer {
             self.gen_initializer(offset, &variable.ty, initializer);
         }
@@ -771,7 +757,7 @@ impl Generator {
         self.gen_expr(expr);
         self.pop("rax");
 
-        // caseにジャンプする処理
+        // Jump to case label
         let mut case_labels = Vec::new();
         for case in cases {
             let label_num = self.get_label_num();
@@ -782,6 +768,8 @@ impl Generator {
             add_mnemonic!(self, "cmp rax, rbx");
             add_mnemonic!(self, "je .Lcase{}", label_num);
         }
+
+        // Save case label numbers. this will use in "gen_case_stmt"
         self.case_labels_iter = Box::new(case_labels.into_iter());
 
         if has_default {
@@ -888,13 +876,14 @@ impl Generator {
 
                 self.stack_size = 0;
 
+                // Prologue
                 self.push("rbp");
                 add_mnemonic!(self, "mov rbp, rsp");
                 add_mnemonic!(self, "sub rsp, {}", stack_size);
 
                 self.stack_size += stack_size;
 
-                // Store argument values to stack
+                // Store argument values into the stack
                 let mut reg = 0;
                 let mut xmm_reg = 0;
                 for arg in args {
@@ -916,7 +905,7 @@ impl Generator {
 
                 self.stack_size -= stack_size;
 
-                // return文がなかったら0を返す
+                // If doesn't have return statements, return 0
                 if !self.has_return {
                     add_mnemonic!(self, "mov rax, 0");
                     add_mnemonic!(self, "mov rsp, rbp");
@@ -938,7 +927,6 @@ impl Generator {
 
     pub fn gen_global_var(&mut self, declarations: &Vec<Declaration>) {
         self.code.push_str(".data\n");
-        // グローバル変数
         for declaration in declarations {
             match &declaration.kind {
                 DeclarationKind::GlobalVariable(variable, initializer, is_static) => {
@@ -948,11 +936,11 @@ impl Generator {
 
                     add_label!(self, global!(variable.clone()));
 
-                    // 初期値
+                    // Initializer
                     if let Some(initializer) = initializer {
                         self.gen_global_initializer(&variable.ty, initializer.clone());
                     } else {
-                        // 初期化式がない場合は0で初期化
+                        // Initialize to 0 if there is no initializer
                         add_mnemonic!(self, ".zero {}", variable.ty.get_size());
                     }
                 },
@@ -968,12 +956,12 @@ impl Generator {
             (Type::Short, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".value {}", num),
             (Type::Long, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".quad {}", num),
             (Type::Pointer(_), ExprKind::Address(variable)) => add_mnemonic!(self, ".quad {}", global!(variable)),
-            // TODO: ポインタ演算
+            // TODO: Pointer arithmetic
             (Type::Array(box Type::Char, _), ExprKind::Literal(Literal::String(num))) |
             (Type::Pointer(box Type::Char), ExprKind::Literal(Literal::String(num))) |
             (Type::Pointer(box Type::Const(box Type::Char)), ExprKind::Literal(Literal::String(num))) => add_mnemonic!(self, ".quad .Ltext{}", num),
             (Type::Const(ty), _) => self.gen_global_init_expr(&ty, init_expr),
-            _ => panic!("サポートしていない初期化式です"),
+            _ => panic!(),
         };
     }
 
@@ -1042,26 +1030,26 @@ impl Generator {
         self.code.push_str(".intel_syntax noprefix\n");
         self.code.push_str(".global main\n");
 
-        // 文字列リテラル
-        // .rodataに配置
+        // String literals
         self.code.push_str(".section .rodata\n");
         for (i, string) in program.string_list.into_iter().enumerate() {
             add_label!(self, ".Ltext", i);
             add_mnemonic!(self, ".string \"{}\"", string);
         }
 
-        // Floating point number literals
         self.code.push_str(".data\n");
+
+        // 1 and 0
         add_label!(self, ".Lfone");
         add_mnemonic!(self, ".long 1065353216");
         add_label!(self, ".Lfzero");
         add_mnemonic!(self, ".long 0");
+
+        // Floating point number literals
         for (i, float_num) in program.float_list.into_iter().enumerate() {
             add_label!(self, ".Lfloat", i);
             add_mnemonic!(self, ".long {}", float_num.to_bits());
         }
-
-
 
         self.gen_global_var(&program.declarations);
 
