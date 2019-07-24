@@ -50,8 +50,8 @@ impl Analyzer {
     }
 
     fn check_infix(&mut self, kind: &Infix, lhs: &Expr, rhs: &Expr, span: &Span) -> bool {
-        let lty = lhs.ty();
-        let rty = rhs.ty();
+        let lty = lhs.ty.clone().unwrap_or(Type::Void);
+        let rty = rhs.ty.clone().unwrap_or(Type::Void);
 
         if lty.is_floating_number() || rty.is_floating_number() {
             match kind {
@@ -169,7 +169,7 @@ impl Analyzer {
             ExprKind::MemberAccess(expr, name) => {
                 let ty = self.get_type(expr);
                 match ty {
-                    Type::Structure(members, _) => match members.iter().find(|(name_, _)| name == name_) {
+                    Type::Structure(_, members, _) => match members.iter().find(|(name_, _)| name == name_) {
                         Some((_, var)) => Some(var.ty.clone()),
                         _ => {
                             self.add_error("メンバが見つかりません", &expr.span);
@@ -248,7 +248,7 @@ impl Analyzer {
                     _ => {
                         if let Some(initializer) = initializer {
                             if let InitializerKind::List(_) = initializer.kind {
-                                if let Type::Array(_, _) | Type::Structure(_, _) = var.ty {
+                                if let Type::Array(_, _) | Type::Structure(_, _, _) = var.ty {
                                     self.walk_initializer(initializer);
                                 } else {
                                     self.add_error("配列と構造体以外の変数に初期化リストを使用しています", &initializer.span);

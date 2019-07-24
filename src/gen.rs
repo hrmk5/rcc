@@ -362,7 +362,7 @@ impl Generator {
         let lty = lhs.ty();
         let rty = rhs.ty();
 
-        if let (Type::Structure(members, _), Type::Structure(_, _)) = (lty.clone(), &rty) {
+        if let (Type::Structure(_, members, _), Type::Structure(_, _, _)) = (lty.clone(), &rty) {
             self.gen_lvalue(lhs);
             self.gen_lvalue(rhs);
             self.pop("rbx");
@@ -951,7 +951,7 @@ impl Generator {
                         i += 1;
                     }
                 },
-                Type::Structure(members, _) => {
+                Type::Structure(_, members, _) => {
                     let mut i = 0;
                     for initializer in initializers {
                         let member_offset = offset - members[i].1.offset();
@@ -1100,7 +1100,7 @@ impl Generator {
                         add_mnemonic!(self, ".zero {}", padding);
                     }
                 },
-                Type::Structure(members, _) => {
+                Type::Structure(_, members, _) => {
                     let mut size = 0;
 
                     let mut get_padding = |ty: &Type| -> usize {

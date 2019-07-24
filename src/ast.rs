@@ -21,12 +21,12 @@ pub enum Type {
     Void,
     Pointer(Box<Type>),
     Array(Box<Type>, usize),
-    Structure(Vec<(String, Variable)>, usize),
+    Structure(Option<String>, Vec<(String, Variable)>, usize),
     Const(Box<Type>),
 }
 
 impl Type {
-    pub fn new_structure(member_types: Vec<(String, Type)>) -> Self {
+    pub fn new_structure(name: Option<String>, member_types: Vec<(String, Type)>) -> Self {
         let mut members = Vec::new();
         let mut size = 0;
 
@@ -41,7 +41,7 @@ impl Type {
             size += ty.get_size();
         }
 
-        Type::Structure(members, size)
+        Type::Structure(name, members, size)
     }
 
     pub fn get_size(&self) -> usize {
@@ -55,14 +55,14 @@ impl Type {
             Type::Void => 8,
             Type::Pointer(_) => 8,
             Type::Array(ty, size) => ty.get_size() * size,
-            Type::Structure(_, size) => *size,
+            Type::Structure(_, _, size) => *size,
             Type::Const(ty) => ty.get_size(),
         }
     }
 
     pub fn align(&self) -> usize {
         match self {
-            Type::Structure(members, _) => members.iter()
+            Type::Structure(_, members, _) => members.iter()
                 .max_by_key(|(_, var)| var.ty.align())
                 .map_or(0, |(_, var)| var.ty.align()),
             Type::Array(ty, _) | Type::Const(ty) => ty.align(),
@@ -72,7 +72,7 @@ impl Type {
 
     pub fn find_member(&self, name: &str) -> &Variable {
         match self {
-            Type::Structure(members, _) => match members.iter().find(|(name_, _)| name == name_) {
+            Type::Structure(_, members, _) => match members.iter().find(|(name_, _)| name == name_) {
                 Some((_, var)) => var,
                 _ => panic!("メンバが見つかりません"),
             },
@@ -82,7 +82,7 @@ impl Type {
 
     pub fn is_number(&self) -> bool {
         match self {
-            Type::Array(_, _) | Type::Structure(_, _) | Type::Void => false,
+            Type::Array(_, _) | Type::Structure(_, _, _) | Type::Void => false,
             Type::Const(ty) => ty.is_number(),
             _ => true,
         }
@@ -111,9 +111,8 @@ impl Type {
             },
             Type::Const(lty) => rty.can_assign_to(lty),
             lty if lty.is_number() => rty.is_number(),
-            // TODO: Add check
-            Type::Structure(_, _) => match rty {
-                Type::Structure(_, _) => true,
+            Type::Structure(lname, _, _) => match rty {
+                Type::Structure(rname, _, _) => lname == rname && lname.is_some() && rname.is_some(),
                 _ => false,
             },
             _ => panic!(),

@@ -320,7 +320,7 @@ impl Parser {
             // expect_type内でself.posが1足されてしまう
             self.pos -= 1;
 
-            let ty = Type::new_structure(members);
+            let ty = Type::new_structure(name.clone(), members);
 
             // 名前が指定されていたら構造体マップに追加する
             if let Some(name) = name {
