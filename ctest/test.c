@@ -246,6 +246,9 @@ int main() {
     foo3->b = 41;
     foo3->c = 94;
     expect("->", 170, foo3->a + foo2.b + foo2.c);
+    struct Foo foo4 = foo2;
+    foo4.b = 51;
+    expect("copy structure", 92, foo2.b + foo4.b);
 
     typedef int i32;
     i32 f = 32;

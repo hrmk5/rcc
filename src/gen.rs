@@ -369,6 +369,8 @@ impl Generator {
             self.pop("rax");
 
             self.gen_copy_structure("rax", "rbx", members);
+
+            self.push("rax");
         } else {
             self.gen_lvalue(lhs);
             self.gen_expr(rhs);
@@ -964,17 +966,37 @@ impl Generator {
             InitializerKind::Expr(expr) => {
                 let dst_ty = ty;
                 let src_ty = expr.ty();
-                self.gen_expr(expr);
 
-                let reg = if dst_ty.is_floating_number() {
-                    self.pop_and_convert("xmm0", dst_ty, &src_ty);
-                    "xmm0"
+                if let Type::Structure(_, members, _) = src_ty {
+                    self.gen_lvalue(expr);
+                    self.pop("rax");
+
+                    for (_, member) in members {
+                        let reg = if member.ty.is_floating_number() {
+                            "xmm0"
+                        } else {
+                            "rbx"
+                        };
+
+                        let dst = format!("rbp-{}+{}", offset, member.offset());
+                        let src = format!("rax+{}", member.offset());
+
+                        self.gen_load(reg, &src, &member.ty);
+                        self.gen_save(&dst, reg, &member.ty);
+                    }
                 } else {
-                    self.pop_and_convert("rax", dst_ty, &src_ty);
-                    "rax"
-                };
+                    self.gen_expr(expr);
 
-                self.gen_save(&format!("rbp-{}", offset), reg, dst_ty);
+                    let reg = if dst_ty.is_floating_number() {
+                        self.pop_and_convert("xmm0", dst_ty, &src_ty);
+                        "xmm0"
+                    } else {
+                        self.pop_and_convert("rax", dst_ty, &src_ty);
+                        "rax"
+                    };
+
+                    self.gen_save(&format!("rbp-{}", offset), reg, dst_ty);
+                }
             },
         };
     }
