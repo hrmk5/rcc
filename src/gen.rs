@@ -160,7 +160,7 @@ impl Generator {
                 match variable.location {
                     Location::Local(offset) => add_mnemonic!(self, "mov rax, [rbp-{}]", offset),
                     Location::Global(name) => {
-                        add_mnemonic!(self, "mov rax, {}[rip]", &name);
+                        add_mnemonic!(self, "mov rax, {}", &name);
                     },
                 };
             },
@@ -180,7 +180,7 @@ impl Generator {
             ExprKind::Variable(variable) => {
                 match variable.location {
                     Location::Local(offset) => add_mnemonic!(self, "lea rax, [rbp-{}]", offset),
-                    Location::Global(name) => add_mnemonic!(self, "lea rax, {}[rip]", &name),
+                    Location::Global(name) => add_mnemonic!(self, "lea rax, {}", &name),
                 };
 
                 self.push("rax");
@@ -337,7 +337,7 @@ impl Generator {
                 self.push("rax");
             },
             Location::Global(name) => {
-                add_mnemonic!(self, "lea rax, {}[rip]", &name);
+                add_mnemonic!(self, "lea rax, {}", &name);
                 self.push("rax");
             },
         };
@@ -428,7 +428,7 @@ impl Generator {
         };
 
         if let Some(label_num) = label_num {
-            add_mnemonic!(self, "movsd xmm0, .Ldone[rip]");
+            add_mnemonic!(self, "movsd xmm0, .Ldone");
             add_mnemonic!(self, "jmp .Lend{}", label_num);
             add_label!(self, ".Lelse", label_num);
             add_mnemonic!(self, "pxor xmm0, xmm0");
@@ -480,7 +480,7 @@ impl Generator {
             };
 
             if let Some(label_num) = label_num {
-                add_mnemonic!(self, "movss xmm0, .Lfone[rip]");
+                add_mnemonic!(self, "movss xmm0, .Lfone");
                 add_mnemonic!(self, "jmp .Lend{}", label_num);
                 add_label!(self, ".Lelse", label_num);
                 add_mnemonic!(self, "pxor xmm0, xmm0");
@@ -653,10 +653,10 @@ impl Generator {
         if ty.is_floating_number() {
             let (opcode, one) = match &ty {
                 Type::Float => {
-                    (if is_inc { "addss" } else { "subss" }, ".Lfone[rip]")
+                    (if is_inc { "addss" } else { "subss" }, ".Lfone")
                 },
                 Type::Double => {
-                    (if is_inc { "addsd" } else { "subsd" }, ".Ldone[rip]")
+                    (if is_inc { "addsd" } else { "subsd" }, ".Ldone")
                 },
                 _ => panic!(),
             };
@@ -696,15 +696,15 @@ impl Generator {
                 self.stack_size += 8;
             },
             ExprKind::Literal(Literal::String(num)) => {
-                add_mnemonic!(self, "lea rax, .Ltext{}[rip]", num);
+                add_mnemonic!(self, "lea rax, .Ltext{}", num);
                 self.push("rax");
             },
             ExprKind::Literal(Literal::Float(num)) => {
-                add_mnemonic!(self, "movss xmm0, .Lfloat{}[rip]", num);
+                add_mnemonic!(self, "movss xmm0, .Lfloat{}", num);
                 self.push_xmm("xmm0", &Type::Float);
             },
             ExprKind::Literal(Literal::Double(num)) => {
-                add_mnemonic!(self, "movsd xmm0, .Ldouble{}[rip]", num);
+                add_mnemonic!(self, "movsd xmm0, .Ldouble{}", num);
                 self.push_xmm("xmm0", &Type::Double);
             },
             ExprKind::Increment(expr, is_post) => self.gen_inc_or_dec(*expr, is_post, true),
@@ -728,7 +728,7 @@ impl Generator {
         match ty {
             Type::Float => {
                 self.pop_and_convert("xmm0", &Type::Float, &ty);
-                add_mnemonic!(self, "movss xmm1, .Lfzero[rip]");
+                add_mnemonic!(self, "movss xmm1, .Lfzero");
                 add_mnemonic!(self, "ucomiss xmm0, xmm1");
             },
             Type::Double => {
