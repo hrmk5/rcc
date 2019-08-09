@@ -728,7 +728,7 @@ impl Generator {
         match ty {
             Type::Float => {
                 self.pop_and_convert("xmm0", &Type::Float, &ty);
-                add_mnemonic!(self, "movss xmm1, .Lfzero");
+                add_mnemonic!(self, "pxor xmm1, xmm1");
                 add_mnemonic!(self, "ucomiss xmm0, xmm1");
             },
             Type::Double => {
@@ -1195,8 +1195,6 @@ impl Generator {
         // 1 and 0
         add_label!(self, ".Lfone");
         add_mnemonic!(self, ".long 1065353216");
-        add_label!(self, ".Lfzero");
-        add_mnemonic!(self, ".long 0");
         add_label!(self, ".Ldone");
         add_mnemonic!(self, ".long 0");
         add_mnemonic!(self, ".long 1072693248");
