@@ -71,7 +71,7 @@ impl Analyzer {
         if let ExprKind::SizeOf(inner_expr) = &mut expr.kind.clone() {
             self.get_type(inner_expr);
             mem::replace(expr, Expr {
-                kind: ExprKind::Literal(Literal::Number(inner_expr.ty().get_size() as i32)),
+                kind: ExprKind::Literal(Literal::Number(inner_expr.ty().get_size() as i64)),
                 ty: Some(Type::Int),
                 span: inner_expr.span.clone(),
             });

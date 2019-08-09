@@ -1,6 +1,6 @@
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
-    Number(i32),
+    Number(i64),
     Add,
     Sub,
     Asterisk,

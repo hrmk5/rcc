@@ -82,7 +82,7 @@ impl Tokenizer {
             self.next();
         }
 
-        self.add_token(TokenKind::Number(num as i32), start_col, self.col);
+        self.add_token(TokenKind::Number(num as i64), start_col, self.col);
     }
 
     fn tokenize_decimal(&mut self) {
@@ -110,7 +110,7 @@ impl Tokenizer {
                 self.add_token(TokenKind::DoubleNum(num as f64 / 10u32.pow(pos - 1) as f64), start_col, self.col);
             }
         } else {
-            self.add_token(TokenKind::Number(num as i32), start_col, self.col);
+            self.add_token(TokenKind::Number(num as i64), start_col, self.col);
         }
     }
 

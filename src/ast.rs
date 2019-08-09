@@ -168,7 +168,7 @@ pub enum Infix {
 
 #[derive(Debug, Clone)]
 pub enum Literal {
-    Number(i32),
+    Number(i64),
     Float(usize),
     Double(usize),
     String(usize),

@@ -435,7 +435,7 @@ impl Parser {
 
     fn parse_var(&mut self, ident: String) -> ExprKind {
         if let Some(num) = self.find_enum(&ident) {
-            return ExprKind::Literal(Literal::Number(num as i32));
+            return ExprKind::Literal(Literal::Number(num as i64));
         }
 
         // 変数マップから探す
