@@ -231,6 +231,8 @@ pub enum StmtKind {
     Case(Expr),
     Continue,
     Default,
+    Label(String),
+    Goto(String, u32),
 }
 
 #[derive(Debug)]

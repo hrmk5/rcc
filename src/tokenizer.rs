@@ -151,6 +151,7 @@ impl Tokenizer {
             "const" => TokenKind::Const,
             "float" => TokenKind::Float,
             "double" => TokenKind::Double,
+            "goto" => TokenKind::Goto,
             _ => TokenKind::Ident(s),
         }, start_col, self.col);
     }

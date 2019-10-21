@@ -61,6 +61,7 @@ pub enum TokenKind {
     FloatNum(f32),
     Double,
     DoubleNum(f64),
+    Goto,
 }
 
 impl ToString for TokenKind {
@@ -127,6 +128,7 @@ impl ToString for TokenKind {
             TokenKind::FloatNum(_) => "float",
             TokenKind::Double => "double",
             TokenKind::DoubleNum(_) => "double",
+            TokenKind::Goto => "goto",
         })
     }
 }

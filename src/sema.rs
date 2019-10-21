@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap};
 use std::mem;
 use crate::ast::*;
 use crate::error::{CompileError, Span};
@@ -19,6 +19,7 @@ impl Function {
 
 struct Analyzer {
     functions: HashMap<String, Function>,
+    labels: HashMap<String, u32>,
     errors: Vec<CompileError>,
 }
 
@@ -26,6 +27,7 @@ impl Analyzer {
     fn new() -> Self {
         Self {
             functions: HashMap::new(),
+            labels: HashMap::new(),
             errors: Vec::new(),
         }
     }
@@ -296,8 +298,28 @@ impl Analyzer {
                     self.add_error("ループの中以外でcontinueは使用できません", &stmt.span);
                 }
             },
+            StmtKind::Goto(name, ref mut label_num) => {
+                if let Some(n) = self.labels.get(name) {
+                    *label_num = *n;
+                } else {
+                    self.add_error("ラベルが存在しません", &stmt.span);
+                }
+            },
             StmtKind::Default => {},
+            StmtKind::Label(_) => {},
         }
+    }
+
+    fn walk_labels(&mut self, stmt: &Stmt) {
+        match &stmt.kind {
+            StmtKind::Label(label) => { self.labels.insert(label.clone(), self.labels.len() as u32); },
+            StmtKind::Block(stmts) => {
+                for stmt in stmts {
+                    self.walk_labels(&stmt);
+                }
+            },
+            _ => {},
+        };
     }
 
     fn walk_declaration(&mut self, declaration: &mut Declaration) {
@@ -308,6 +330,7 @@ impl Analyzer {
 
                 // 本体がブロックではない場合はエラー
                 if let StmtKind::Block(_) = stmt.kind {
+                    self.walk_labels(stmt);
                     self.walk_stmt(stmt, false, false, false);
                 } else {
                     self.add_error("関数の本体がブロックではありません", &stmt.span);

@@ -985,6 +985,16 @@ impl Parser {
         StmtKind::Default
     }
 
+    fn parse_goto_stmt(&mut self) -> StmtKind {
+        if let Some(ident) = self.expect_ident() {
+            expect!(self, TokenKind::Semicolon);
+            StmtKind::Goto(ident, 0)
+        } else {
+            self.add_error("識別子ではありません");
+            StmtKind::Block(Vec::new())
+        }
+    }
+
     fn parse_stmt(&mut self) -> Stmt {
         self.push_start_token();
         if let Some(kind) = self.expect_define_stmt() {
@@ -1016,9 +1026,22 @@ impl Parser {
                 self.parse_enum(false);
                 StmtKind::Block(Vec::new())
             },
+            TokenKind::Goto => self.parse_goto_stmt(),
             _ => {
-                self.pos -= 1;
-                self.parse_expr_stmt()
+                (|| {
+                    self.pos -= 1;
+
+                    let ident = self.expect_ident();
+                    if ident.is_some() {
+                        if self.consume(TokenKind::Colon) {
+                            return StmtKind::Label(ident.unwrap());
+                        } else {
+                            self.pos -= 1;
+                        }
+                    }
+
+                    self.parse_expr_stmt()
+                })()
             }
         };
         new_stmt!(self, kind)

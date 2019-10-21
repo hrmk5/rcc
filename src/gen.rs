@@ -10,6 +10,7 @@ struct Function {
 pub struct Generator {
     pub code: String,
     label_num: u32,
+    label_count: u32,
     has_return: bool,
     case_labels_iter: Box<dyn Iterator<Item = u32>>,
     break_label_stack: Vec<u32>,
@@ -55,6 +56,7 @@ impl Generator {
         Generator {
             code: String::new(),
             label_num: 0,
+            label_count: 0,
             has_return: false,
             case_labels_iter: Box::new(Vec::new().into_iter()),
             break_label_stack: Vec::new(),
@@ -925,6 +927,15 @@ impl Generator {
         add_mnemonic!(self, "jmp .Lcontinue{}", self.continue_label_stack.last().unwrap());
     }
 
+    fn gen_goto_stmt(&mut self, _: String, label_num: u32) {
+        add_mnemonic!(self, "jmp .Llabel{}", label_num);
+    }
+
+    fn gen_label(&mut self, _: String) {
+        add_label!(self, ".Llabel", self.label_count);
+        self.label_count += 1;
+    }
+
     fn gen_stmt(&mut self, stmt: Stmt) {
         match stmt.kind {
             StmtKind::Expr(expr) => self.gen_expr_stmt(expr),
@@ -939,6 +950,8 @@ impl Generator {
             StmtKind::Default => self.gen_default_stmt(),
             StmtKind::Break => self.gen_break_stmt(),
             StmtKind::Continue => self.gen_continue_stmt(),
+            StmtKind::Goto(name, label_num) => self.gen_goto_stmt(name, label_num),
+            StmtKind::Label(name) => self.gen_label(name),
         }
     }
 
