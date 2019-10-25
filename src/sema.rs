@@ -2,6 +2,7 @@ use std::collections::{HashMap};
 use std::mem;
 use crate::ast::*;
 use crate::error::{CompileError, Span};
+use crate::id::Id;
 
 struct Function {
     return_type: Type,
@@ -18,8 +19,8 @@ impl Function {
 }
 
 struct Analyzer {
-    functions: HashMap<String, Function>,
-    labels: HashMap<String, u32>,
+    functions: HashMap<Id, Function>,
+    labels: HashMap<Id, u32>,
     errors: Vec<CompileError>,
 }
 

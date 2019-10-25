@@ -1,10 +1,12 @@
 use crate::token::*;
 use crate::error::{CompileError, Span};
+use crate::id::IdMap;
 
 #[derive(Debug)]
-pub struct Tokenizer {
+pub struct Tokenizer<'a> {
     pub tokens: Vec<Token>,
     pub errors: Vec<CompileError>,
+    id_map: &'a mut IdMap,
     input: Vec<char>,
     pos: usize,
     ch: char,
@@ -12,11 +14,12 @@ pub struct Tokenizer {
     col: usize,
 }
 
-impl Tokenizer {
-    pub fn new(input: &str) -> Self {
+impl<'a> Tokenizer<'a> {
+    pub fn new(input: &str, id_map: &'a mut IdMap) -> Self {
         Tokenizer {
             tokens: Vec::new(),
             input: input.chars().collect(),
+            id_map,
             pos: 0,
             ch: input.chars().next().unwrap_or('\0'),
             errors: Vec::new(),
@@ -126,7 +129,7 @@ impl Tokenizer {
         }
 
         let s: String = self.input[start_pos..self.pos].iter().collect();
-        self.add_token(match &*s {
+        let token = match &*s {
             "return" => TokenKind::Return,
             "if" => TokenKind::If,
             "else" => TokenKind::Else,
@@ -152,8 +155,12 @@ impl Tokenizer {
             "float" => TokenKind::Float,
             "double" => TokenKind::Double,
             "goto" => TokenKind::Goto,
-            _ => TokenKind::Ident(s),
-        }, start_col, self.col);
+            s => {
+                let id = self.id_map.new_id(&s);
+                TokenKind::Ident(id)
+            }
+        };
+        self.add_token(token, start_col, self.col);
     }
 
     pub fn tokenize_string(&mut self) {
@@ -176,7 +183,9 @@ impl Tokenizer {
             };
         }
 
-        self.add_token(TokenKind::String(self.input[start_pos..self.pos - 1].iter().collect()), start_col, self.col);
+        let s: String = self.input[start_pos..self.pos - 1].iter().collect();
+        let id = self.id_map.new_id(&s);
+        self.add_token(TokenKind::String(id), start_col, self.col);
     }
 
     pub fn skip_single_line_comment(&mut self) {

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use crate::ast::*;
+use crate::id::{Id, IdMap};
 
 #[derive(Clone, Debug)]
 struct Function {
@@ -17,8 +18,9 @@ pub struct Generator {
     continue_label_stack: Vec<u32>,
     default_label: Vec<u32>,
     stack_size: usize,
-    functions: HashMap<String, Function>,
-    curr_func: String,
+    functions: HashMap<Id, Function>,
+    curr_func: Option<Id>,
+    id_map: IdMap,
 }
 
 const ARG_REGISTERS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
@@ -52,7 +54,7 @@ macro_rules! global {
 }
 
 impl Generator {
-    pub fn new() -> Self {
+    pub fn new(id_map: IdMap) -> Self {
         Generator {
             code: String::new(),
             label_num: 0,
@@ -64,7 +66,8 @@ impl Generator {
             default_label: Vec::new(),
             stack_size: 0,
             functions: HashMap::new(),
-            curr_func: String::new(),
+            curr_func: None,
+            id_map,
         }
     }
 
@@ -162,7 +165,7 @@ impl Generator {
                 match variable.location {
                     Location::Local(offset) => add_mnemonic!(self, "mov rax, [rbp-{}]", offset),
                     Location::Global(name) => {
-                        add_mnemonic!(self, "mov rax, {}", &name);
+                        add_mnemonic!(self, "mov rax, {}", self.id_map.name(&name));
                     },
                 };
             },
@@ -182,7 +185,7 @@ impl Generator {
             ExprKind::Variable(variable) => {
                 match variable.location {
                     Location::Local(offset) => add_mnemonic!(self, "lea rax, [rbp-{}]", offset),
-                    Location::Global(name) => add_mnemonic!(self, "lea rax, {}", &name),
+                    Location::Global(name) => add_mnemonic!(self, "lea rax, {}", self.id_map.name(&name)),
                 };
 
                 self.push("rax");
@@ -339,13 +342,13 @@ impl Generator {
                 self.push("rax");
             },
             Location::Global(name) => {
-                add_mnemonic!(self, "lea rax, {}", &name);
+                add_mnemonic!(self, "lea rax, {}", self.id_map.name(&name));
                 self.push("rax");
             },
         };
     }
 
-    fn gen_copy_structure(&mut self, dst: &str, src: &str, members: Vec<(String, Variable)>) {
+    fn gen_copy_structure(&mut self, dst: &str, src: &str, members: Vec<(Id, Variable)>) {
         for (_, member) in members {
             let reg = if member.ty.is_floating_number() {
                 "xmm0"
@@ -587,8 +590,8 @@ impl Generator {
         }
     }
 
-    fn gen_call(&mut self, name: String, args: Vec<Expr>) {
-        let Function { params, return_type, .. } = self.functions[&name].clone();
+    fn gen_call(&mut self, name: &Id, args: Vec<Expr>) {
+        let Function { params, return_type, .. } = self.functions[name].clone();
 
         let mut arg_reg = 0;
         let mut xmm_arg_reg = 0;
@@ -623,10 +626,10 @@ impl Generator {
         // Align the stack
         let padding = 16 - (self.stack_size - 8) % 16;
         if padding == 16 {
-            add_mnemonic!(self, "call {}", name);
+            add_mnemonic!(self, "call {}", self.id_map.name(&name));
         } else {
             add_mnemonic!(self, "sub rsp, {}", padding);
-            add_mnemonic!(self, "call {}", name);
+            add_mnemonic!(self, "call {}", self.id_map.name(&name));
             // Revert the stack
             add_mnemonic!(self, "add rsp, {}", padding);
         }
@@ -715,7 +718,7 @@ impl Generator {
             ExprKind::Address(variable) => self.gen_address(variable),
             ExprKind::Assign(lhs, rhs) => self.gen_assign(*lhs, *rhs),
             ExprKind::Infix(kind, lhs, rhs) => self.gen_infix(kind, *lhs, *rhs),
-            ExprKind::Call(name, args) => self.gen_call(name, args),
+            ExprKind::Call(name, args) => self.gen_call(&name, args),
             ExprKind::BitNot(expr) => self.gen_bit_not(*expr),
             ExprKind::SizeOf(_) => panic!("unexpected sizeof unary operator"),
             ExprKind::Invalid => eprintln!("invalid expression"),
@@ -754,7 +757,7 @@ impl Generator {
     }
 
     fn gen_return_stmt(&mut self, expr: Expr) {
-        let return_type = self.functions[&self.curr_func].return_type.clone();
+        let return_type = self.functions[&self.curr_func.unwrap()].return_type.clone();
         let ty = expr.ty();
 
         self.has_return = true;
@@ -927,11 +930,11 @@ impl Generator {
         add_mnemonic!(self, "jmp .Lcontinue{}", self.continue_label_stack.last().unwrap());
     }
 
-    fn gen_goto_stmt(&mut self, _: String, label_num: u32) {
+    fn gen_goto_stmt(&mut self, _: &Id, label_num: u32) {
         add_mnemonic!(self, "jmp .Llabel{}", label_num);
     }
 
-    fn gen_label(&mut self, _: String) {
+    fn gen_label(&mut self, _: &Id) {
         add_label!(self, ".Llabel", self.label_count);
         self.label_count += 1;
     }
@@ -950,8 +953,8 @@ impl Generator {
             StmtKind::Default => self.gen_default_stmt(),
             StmtKind::Break => self.gen_break_stmt(),
             StmtKind::Continue => self.gen_continue_stmt(),
-            StmtKind::Goto(name, label_num) => self.gen_goto_stmt(name, label_num),
-            StmtKind::Label(name) => self.gen_label(name),
+            StmtKind::Goto(name, label_num) => self.gen_goto_stmt(&name, label_num),
+            StmtKind::Label(name) => self.gen_label(&name),
         }
     }
 
@@ -1017,17 +1020,17 @@ impl Generator {
     pub fn gen_declaration(&mut self, declaration: Declaration) {
         match declaration.kind {
             DeclarationKind::Func(name, return_type, args, stack_size, block, is_static) => {
-                self.curr_func = name.clone();
-                self.functions.insert(name.clone(), Function {
+                self.curr_func = Some(name);
+                self.functions.insert(name, Function {
                     return_type,
                     params: args.clone().into_iter().map(|arg| arg.ty).collect(),
                 });
 
                 if !is_static {
-                    self.code.push_str(&format!(".global {}\n", name));
+                    self.code.push_str(&format!(".global {}\n", self.id_map.name(&name)));
                 }
 
-                add_label!(self, &name);
+                add_label!(self, self.id_map.name(&name));
 
                 self.stack_size = 0;
 
@@ -1086,10 +1089,10 @@ impl Generator {
             match &declaration.kind {
                 DeclarationKind::GlobalVariable(variable, initializer, is_static) => {
                     if !is_static {
-                        self.code.push_str(&format!(".global {}\n", global!(variable.clone())));
+                        self.code.push_str(&format!(".global {}\n", self.id_map.name(&global!(variable.clone()))));
                     }
 
-                    add_label!(self, global!(variable.clone()));
+                    add_label!(self, self.id_map.name(&global!(variable.clone())));
 
                     // Initializer
                     if let Some(initializer) = initializer {
@@ -1110,7 +1113,7 @@ impl Generator {
             (Type::Char, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".byte {}", num),
             (Type::Short, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".value {}", num),
             (Type::Long, ExprKind::Literal(Literal::Number(num))) => add_mnemonic!(self, ".quad {}", num),
-            (Type::Pointer(_), ExprKind::Address(variable)) => add_mnemonic!(self, ".quad {}", global!(variable)),
+            (Type::Pointer(_), ExprKind::Address(variable)) => add_mnemonic!(self, ".quad {}", self.id_map.name(&global!(variable))),
             // TODO: Pointer arithmetic
             (Type::Array(box Type::Char, _), ExprKind::Literal(Literal::String(num))) |
             (Type::Pointer(box Type::Char), ExprKind::Literal(Literal::String(num))) |

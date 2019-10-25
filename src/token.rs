@@ -1,3 +1,5 @@
+use crate::id::Id;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
     Number(i64),
@@ -16,7 +18,7 @@ pub enum TokenKind {
     LessThanOrEqual,
     GreaterThan,
     GreaterThanOrEqual,
-    Ident(String),
+    Ident(Id),
     Semicolon,
     Assign,
     Return,
@@ -31,7 +33,7 @@ pub enum TokenKind {
     Lbracket,
     Rbracket,
     Char,
-    String(String),
+    String(Id),
     Or,
     Xor,
     BitNot,

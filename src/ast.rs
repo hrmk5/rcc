@@ -1,4 +1,5 @@
 use crate::error::Span;
+use crate::id::Id;
 
 pub fn align(stack_size: usize, ty: &Type) -> usize {
     let align = ty.align();
@@ -21,12 +22,12 @@ pub enum Type {
     Void,
     Pointer(Box<Type>),
     Array(Box<Type>, usize),
-    Structure(Option<String>, Vec<(String, Variable)>, usize),
+    Structure(Option<Id>, Vec<(Id, Variable)>, usize),
     Const(Box<Type>),
 }
 
 impl Type {
-    pub fn new_structure(name: Option<String>, member_types: Vec<(String, Type)>) -> Self {
+    pub fn new_structure(name: Option<Id>, member_types: Vec<(Id, Type)>) -> Self {
         let mut members = Vec::new();
         let mut size = 0;
 
@@ -70,7 +71,7 @@ impl Type {
         }
     }
 
-    pub fn find_member(&self, name: &str) -> &Variable {
+    pub fn find_member(&self, name: &Id) -> &Variable {
         match self {
             Type::Structure(_, members, _) => match members.iter().find(|(name_, _)| name == name_) {
                 Some((_, var)) => var,
@@ -123,7 +124,7 @@ impl Type {
 #[derive(Debug, Clone)]
 pub enum Location {
     Local(usize), // rbpからのオフセット
-    Global(String), // ラベル
+    Global(Id), // ラベル
 }
 
 #[derive(Debug, Clone)]
@@ -183,10 +184,10 @@ pub enum ExprKind {
     Address(Variable),
     Assign(Box<Expr>, Box<Expr>),
     Infix(Infix, Box<Expr>,  Box<Expr>),
-    Call(String, Vec<Expr>),
+    Call(Id, Vec<Expr>),
     BitNot(Box<Expr>),
     SizeOf(Box<Expr>),
-    MemberAccess(Box<Expr>, String),
+    MemberAccess(Box<Expr>, Id),
     Increment(Box<Expr>, bool),
     Decrement(Box<Expr>, bool),
     Invalid,
@@ -231,8 +232,8 @@ pub enum StmtKind {
     Case(Expr),
     Continue,
     Default,
-    Label(String),
-    Goto(String, u32),
+    Label(Id),
+    Goto(Id, u32),
 }
 
 #[derive(Debug)]
@@ -243,9 +244,9 @@ pub struct Stmt {
 
 #[derive(Debug)]
 pub enum DeclarationKind {
-    Func(String, Type, Vec<Variable>, usize, Stmt, bool), // 関数名, 戻り値の型, 引数, スタックのサイズ, 処理, staticかどうか
+    Func(Id, Type, Vec<Variable>, usize, Stmt, bool), // 関数名, 戻り値の型, 引数, スタックのサイズ, 処理, staticかどうか
     GlobalVariable(Variable, Option<Initializer>, bool), // 変数名, 変数, 初期化式, staticかどうか
-    Prototype(String, Type, Vec<Type>), // 関数名, 戻り値の型, 引数
+    Prototype(Id, Type, Vec<Type>), // 関数名, 戻り値の型, 引数
     Extern(Box<Declaration>),
 }
 
@@ -258,11 +259,11 @@ pub struct Declaration {
 impl Declaration {
     // 識別子を取得する
     #[allow(dead_code)]
-    pub fn get_identifier(&self) -> String {
+    pub fn get_identifier(&self) -> Id {
         match &self.kind {
-            DeclarationKind::Func(name, _, _, _, _, _) => name.clone(),
+            DeclarationKind::Func(name, _, _, _, _, _) => *name,
             DeclarationKind::GlobalVariable(var, _, _) => match &var.location {
-                Location::Global(name) => name.clone(),
+                Location::Global(name) => *name,
                 _ => panic!(),
             },
             DeclarationKind::Prototype(name, _, _) => name.clone(),

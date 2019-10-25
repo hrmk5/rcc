@@ -8,6 +8,7 @@ mod ast;
 mod error;
 mod token;
 mod preprocess;
+mod id;
 
 use std::env;
 use std::process;
@@ -18,6 +19,7 @@ use parser::Parser;
 use gen::Generator;
 use error::CompileError;
 use preprocess::preprocess;
+use id::IdMap;
 use colored::*;
 
 enum ShowType {
@@ -59,8 +61,10 @@ fn main() {
         _ => ShowType::Code,
     };
 
+    let mut id_map = IdMap::new();
+
     // 字句解析
-    let tokenizer = Tokenizer::new(&input);
+    let tokenizer = Tokenizer::new(&input, &mut id_map);
     let tokens = match tokenizer.tokenize() {
         Ok(tokens) => tokens,
         Err(errors) => {
@@ -77,7 +81,7 @@ fn main() {
     }
 
     // プリプロセス
-    let tokens = match preprocess(tokens) {
+    let tokens = match preprocess(tokens, &mut id_map) {
         Ok(tokens) => tokens,
         Err(errors) => {
             print_error(&lines, &errors);
@@ -93,7 +97,7 @@ fn main() {
     }
 
     // 構文解析
-    let parser = Parser::new(tokens);
+    let parser = Parser::new(tokens, &id_map);
     let mut program = match parser.parse() {
         Ok(program) => program,
         Err(errors) => {
@@ -114,7 +118,7 @@ fn main() {
     }
 
     // コード生成
-    let mut generator = Generator::new();
+    let mut generator = Generator::new(id_map);
     generator.gen(program);
 
     if let ShowType::Code = show_type {

@@ -5,19 +5,22 @@ use std::mem;
 use crate::token::*;
 use crate::ast::*;
 use crate::error::{CompileError, Span};
+use crate::id::{Id, IdMap};
 
 #[derive(Debug)]
-pub struct Parser {
+pub struct Parser<'a> {
     pub errors: Vec<CompileError>,
 
-    global_variables: HashMap<String, Variable>,
-    global_structures: HashMap<String, Type>,
-    global_typedefs: HashMap<String, Type>,
-    global_enums: HashMap<String, i64>,
-    variables: HashMap<String, Variable>,
-    structures: HashMap<String, Type>,
-    typedefs: HashMap<String, Type>,
-    enums: HashMap<String, i64>,
+    id_map: &'a IdMap,
+
+    global_variables: HashMap<Id, Variable>,
+    global_structures: HashMap<Id, Type>,
+    global_typedefs: HashMap<Id, Type>,
+    global_enums: HashMap<Id, i64>,
+    variables: HashMap<Id, Variable>,
+    structures: HashMap<Id, Type>,
+    typedefs: HashMap<Id, Type>,
+    enums: HashMap<Id, i64>,
 
     string_list: Vec<String>,
     float_list: Vec<f32>,
@@ -91,12 +94,13 @@ macro_rules! new_decl {
     };
 }
 
-impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+impl<'a> Parser<'a> {
+    pub fn new(tokens: Vec<Token>, id_map: &'a IdMap) -> Self {
         Parser {
             pos: 0,
             tokens,
             errors: Vec::new(),
+            id_map,
             global_variables: HashMap::new(),
             global_structures: HashMap::new(),
             global_typedefs: HashMap::new(),
@@ -164,7 +168,7 @@ impl Parser {
         ExprKind::Invalid
     }
 
-    fn get_token(&mut self) -> &TokenKind {
+    fn get_token(&self) -> &TokenKind {
         &self.tokens[self.pos].kind
     }
 
@@ -173,34 +177,34 @@ impl Parser {
         &self.tokens[self.pos - 1].kind
     }
 
-    fn find_struct(&self, name: &str) -> Option<Type> {
+    fn find_struct(&self, name: &Id) -> Option<Type> {
         self.structures.get(name)
             .or_else(|| self.global_structures.get(name))
             .map(|ty| ty.clone())
     }
 
-    fn find_var(&self, name: &str) -> Option<Variable> {
+    fn find_var(&self, name: &Id) -> Option<Variable> {
         self.variables.get(name)
             .or_else(|| self.global_variables.get(name))
             .map(|var| var.clone())
     }
 
-    fn find_typedef(&self, name: &str) -> Option<&Type> {
+    fn find_typedef(&self, name: &Id) -> Option<&Type> {
         self.typedefs.get(name)
             .or_else(|| self.global_typedefs.get(name))
     }
 
-    fn find_enum(&self, name: &str) -> Option<i64> {
+    fn find_enum(&self, name: &Id) -> Option<i64> {
         self.enums.get(name)
             .or_else(|| self.global_enums.get(name))
             .map(|n| n.clone())
     }
 
-    fn expect_ident(&mut self) -> Option<String> {
+    fn expect_ident(&mut self) -> Option<Id> {
         match self.tokens[self.pos].kind {
             TokenKind::Ident(ref ident) => {
                 self.pos += 1;
-                Some(ident.clone())
+                Some(*ident)
             },
             _ => None,
         }
@@ -251,11 +255,11 @@ impl Parser {
                 self.add_error("識別子ではありません");
                 None
             },
-            None => Some(Variable::new(ty, Location::Global(String::new()))),
+            None => None, // XXX: original: Some(Variable::new(ty, Location::Global(String::new())))
         }
     }
 
-    fn define_variable(&mut self, ident: &str, ty: &Type, array_as_pointer: bool) -> Variable {
+    fn define_variable(&mut self, ident: &Id, ty: &Type, array_as_pointer: bool) -> Variable {
         let ty = match ty {
             Type::Array(ty, _) if array_as_pointer => Type::Pointer(ty.clone()),
             ty => ty.clone(),
@@ -266,7 +270,7 @@ impl Parser {
         self.stack_size = align(self.stack_size, &ty);
 
         let variable = Variable::new(ty.clone(), Location::Local(self.stack_size));
-        self.variables.insert(ident.to_string(), variable.clone());
+        self.variables.insert(*ident, variable.clone());
         variable
     }
 
@@ -386,10 +390,10 @@ impl Parser {
         }
     }
 
-    fn parse_string(&mut self, s: String) -> ExprKind {
-        let mut s = s;
+    fn parse_string(&mut self, s: &Id) -> ExprKind {
+        let mut s = String::from(self.id_map.name(s));
         while let TokenKind::String(new_s) = self.get_token() {
-            s += new_s;
+            s += self.id_map.name(new_s);
             self.pos += 1;
         }
 
@@ -407,7 +411,7 @@ impl Parser {
         ExprKind::Literal(Literal::Double(self.double_list.len() - 1))
     }
 
-    fn parse_call(&mut self, ident: String) -> ExprKind {
+    fn parse_call(&mut self, ident: &Id) -> ExprKind {
         // 引数をパース
         let mut args = Vec::<Expr>::new();
         
@@ -430,16 +434,16 @@ impl Parser {
             }
         }
 
-        ExprKind::Call(ident, args)
+        ExprKind::Call(*ident, args)
     }
 
-    fn parse_var(&mut self, ident: String) -> ExprKind {
-        if let Some(num) = self.find_enum(&ident) {
+    fn parse_var(&mut self, ident: &Id) -> ExprKind {
+        if let Some(num) = self.find_enum(ident) {
             return ExprKind::Literal(Literal::Number(num as i64));
         }
 
         // 変数マップから探す
-        match self.find_var(&ident) {
+        match self.find_var(ident) {
             Some(var) => ExprKind::Variable(var.clone()),
             _ => self.invalid_expr("変数が見つかりません", -1),
         }
@@ -458,7 +462,7 @@ impl Parser {
         }
     }
 
-    fn parse_var_or_call(&mut self, ident: String) -> ExprKind {
+    fn parse_var_or_call(&mut self, ident: &Id) -> ExprKind {
         if self.consume(TokenKind::Lparen) {
             // 識別子の直後のトークンが開きカッコだったら関数呼び出としてパースする
             self.parse_call(ident)
@@ -481,8 +485,8 @@ impl Parser {
             TokenKind::Number(num) => new_expr!(self, ExprKind::Literal(Literal::Number(num))),
             TokenKind::FloatNum(num) => new_expr!(self, self.parse_float(num)),
             TokenKind::DoubleNum(num) => new_expr!(self, self.parse_double(num)),
-            TokenKind::String(s) => new_expr!(self, self.parse_string(s)),
-            TokenKind::Ident(ident) => new_expr!(self, self.parse_var_or_call(ident)),
+            TokenKind::String(s) => new_expr!(self, self.parse_string(&s)),
+            TokenKind::Ident(ident) => new_expr!(self, self.parse_var_or_call(&ident)),
             _ => new_expr!(self, self.invalid_expr("数値でも開きカッコでもないトークンです", 0)),
         };
 
@@ -1047,11 +1051,11 @@ impl Parser {
         new_stmt!(self, kind)
     }
 
-    fn parse_func_decl(&mut self, ty: Type, ident: String, is_static: bool) -> Option<DeclarationKind> {
+    fn parse_func_decl(&mut self, ty: Type, ident: &Id, is_static: bool) -> Option<DeclarationKind> {
         self.stack_size = 0;
 
         // 引数をパース
-        self.variables = HashMap::<String, Variable>::new();
+        self.variables = HashMap::<Id, Variable>::new();
         if !self.consume(TokenKind::Rparen) {
             loop {
                 let _ = self.expect_define(true, true);
@@ -1077,17 +1081,17 @@ impl Parser {
 
         if self.consume(TokenKind::Semicolon) {
             // セミコロンだったらプロトタイプ宣言
-            Some(DeclarationKind::Prototype(ident, ty, args.into_iter().map(|var| var.ty).collect()))
+            Some(DeclarationKind::Prototype(*ident, ty, args.into_iter().map(|var| var.ty).collect()))
         } else if is_prototype {
             self.add_error("引数名を省略しています");
             None
         } else {
             let stmt = self.parse_stmt();
-            Some(DeclarationKind::Func(ident, ty, args, self.stack_size, stmt, is_static))
+            Some(DeclarationKind::Func(*ident, ty, args, self.stack_size, stmt, is_static))
         }
     }
 
-    fn parse_global_var_decl(&mut self, ty: Type, ident: String, is_static: bool) -> Option<DeclarationKind> {
+    fn parse_global_var_decl(&mut self, ty: Type, ident: &Id, is_static: bool) -> Option<DeclarationKind> {
         // 添字演算子があったら配列型にする
         let mut ty = ty;
         let first_ty = &mut ty as *mut Type;
@@ -1126,8 +1130,8 @@ impl Parser {
 
         expect!(self, TokenKind::Semicolon);
 
-        let variable = Variable::new(ty, Location::Global(ident.clone()));
-        self.global_variables.insert(ident.clone(), variable.clone());
+        let variable = Variable::new(ty, Location::Global(*ident));
+        self.global_variables.insert(*ident, variable.clone());
         Some(DeclarationKind::GlobalVariable(variable, initializer, is_static))
     }
 
@@ -1142,10 +1146,10 @@ impl Parser {
             self.pos += 1;
             if self.consume(TokenKind::Lparen) {
                 // 識別子の次のトークンが開きカッコだったら関数定義としてパースする
-                self.parse_func_decl(ty, ident, is_static)
+                self.parse_func_decl(ty, &ident, is_static)
             } else {
                 // 開きカッコではなかったらグローバル変数定義としてパースする
-                self.parse_global_var_decl(ty, ident, is_static)
+                self.parse_global_var_decl(ty, &ident, is_static)
             }
         } else {
             self.add_error("識別子ではありません");
